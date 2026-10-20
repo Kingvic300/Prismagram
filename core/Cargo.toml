@@ -1,0 +1,15 @@
+[package]
+name = "prismagram-core"
+version = "0.1.0"
+description = "Prisma schema parser that produces a class-diagram model"
+license = "MIT"
+edition = "2021"
+
+[lib]
+name = "prismagram_core"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"

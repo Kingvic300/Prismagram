@@ -1,0 +1,18 @@
+# Node / Tauri
+node_modules/
+desktop/dist/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+
+# Rust
+core/target/
+target/
+
+# Release artefacts
+release/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp

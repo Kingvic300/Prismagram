@@ -1,0 +1,86 @@
+name: Release
+# Builds installers on each platform when a version tag is pushed, and attaches them
+# to a GitHub release. Binaries are not code-signed (see README, "Install").
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            bundles: deb,appimage,rpm
+          - platform: macos-14       # Apple silicon
+            bundles: dmg,app
+          - platform: macos-15-intel # Intel
+            bundles: dmg,app
+          - platform: windows-latest
+            bundles: nsis,msi
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev librsvg2-dev patchelf
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Core tests
+        working-directory: core
+        run: cargo test
+
+      - name: Desktop dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Layout tests
+        working-directory: desktop
+        run: npm test
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: Prismagram ${{ github.ref_name }}
+          releaseBody: |
+            Turn Prisma schema files into clean UML class diagrams. Works offline.
+
+            Download the file for your system:
+            - Linux: `.deb` (Debian, Ubuntu, Kali), `.AppImage` (any distribution) or `.rpm`
+            - macOS: `.dmg` (`aarch64` for Apple silicon, `x64` for Intel)
+            - Windows: `-setup.exe` or `.msi`
+
+            These builds are not code-signed yet. See the README's "Install" section for how to open them on macOS and Windows.
+          releaseDraft: false
+          prerelease: false
+          args: --bundles ${{ matrix.bundles }}
+
+  notes:
+    # After every platform has uploaded, turn the flat file list into a per-platform table.
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Write download table into the release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/release_notes.py "${{ github.ref_name }}"

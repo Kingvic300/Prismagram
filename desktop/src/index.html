@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prismagram</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script type="module" src="js/main.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <img src="logo.svg" alt="" width="26" height="26" />
+        <span>Prismagram</span>
+      </div>
+      <div class="file-chip" id="fileChip" title="No file open">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z M14 3v5h5" /></svg>
+        <span id="fileName">untitled.prisma</span>
+        <span class="dirty-dot" id="dirtyDot" hidden></span>
+      </div>
+      <div class="spacer"></div>
+      <button class="btn ghost" id="btnToggleEditor" title="Toggle editor (Ctrl+B)">
+        <svg viewBox="0 0 24 24" class="ico"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></svg>
+      </button>
+      <div class="menu-wrap">
+        <button class="btn ghost" id="btnSamples">
+          <svg viewBox="0 0 24 24" class="ico"><path d="M12 3l9 5-9 5-9-5 9-5z M3 13l9 5 9-5" /></svg>
+          Samples
+        </button>
+        <div class="menu" id="menuSamples" hidden>
+          <button data-sample="zoo">Zoo <small>the classic hierarchy</small></button>
+          <button data-sample="blog">Blog <small>users, posts, tags</small></button>
+          <button data-sample="shop">Shop <small>orders, products, enums</small></button>
+        </div>
+      </div>
+      <button class="btn ghost" id="btnOpen" title="Open schema (Ctrl+O)">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+        Open
+      </button>
+      <button class="btn ghost" id="btnSave" title="Save schema (Ctrl+S)">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M5 3h11l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M7 3v6h8V3 M7 21v-7h10v7" /></svg>
+        Save
+      </button>
+      <div class="menu-wrap">
+        <button class="btn primary" id="btnExport" title="Export diagram">
+          <svg viewBox="0 0 24 24" class="ico"><path d="M12 3v12 M7 10l5 5 5-5 M4 21h16" /></svg>
+          Export
+        </button>
+        <div class="menu right" id="menuExport" hidden>
+          <button data-export="png">PNG image <small>Ctrl+Shift+E</small></button>
+          <button data-export="svg">SVG vector <small>Ctrl+E</small></button>
+          <button data-export="copy">Copy SVG markup</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="workspace" id="workspace">
+      <section class="editor-pane" id="editorPane">
+        <div class="pane-head">
+          <span>schema.prisma</span>
+          <span class="badge" id="providerBadge" hidden></span>
+        </div>
+        <div class="editor">
+          <div class="gutter" id="gutter"></div>
+          <div class="code">
+            <pre class="hl" id="highlight" aria-hidden="true"></pre>
+            <textarea id="source" spellcheck="false" wrap="off" autocapitalize="off" autocomplete="off"
+              placeholder="// Paste a Prisma schema, open a file or drop one here"></textarea>
+          </div>
+        </div>
+        <div class="problems" id="problems" hidden></div>
+      </section>
+
+      <div class="splitter" id="splitter"></div>
+
+      <section class="canvas-pane" id="canvasPane">
+        <div class="stage" id="stage">
+          <div class="viewport" id="viewport"></div>
+        </div>
+
+        <div class="empty" id="emptyState">
+          <img src="logo.svg" alt="" width="72" height="72" />
+          <h1>Draw your Prisma schema</h1>
+          <p>Open or drop a <code>.prisma</code> file, or start typing in the editor. The diagram updates as you type.</p>
+          <div class="row">
+            <button class="btn primary" id="emptyOpen">Open file</button>
+            <button class="btn" id="emptySample">Try a sample</button>
+          </div>
+        </div>
+
+        <div class="toolbar floating top-left">
+          <div class="search">
+            <svg viewBox="0 0 24 24" class="ico"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
+            <input id="search" placeholder="Find model…" list="modelList" />
+            <datalist id="modelList"></datalist>
+          </div>
+        </div>
+
+        <div class="toolbar floating bottom-right">
+          <button class="icon-btn" id="zoomOut" title="Zoom out (Ctrl+-)"><svg viewBox="0 0 24 24" class="ico"><path d="M5 12h14" /></svg></button>
+          <button class="zoom-label" id="zoomLabel" title="Reset to 100%">100%</button>
+          <button class="icon-btn" id="zoomIn" title="Zoom in (Ctrl+=)"><svg viewBox="0 0 24 24" class="ico"><path d="M12 5v14 M5 12h14" /></svg></button>
+          <span class="sep"></span>
+          <button class="icon-btn" id="zoomFit" title="Fit to screen (Ctrl+0)"><svg viewBox="0 0 24 24" class="ico"><path d="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5" /></svg></button>
+          <span class="sep"></span>
+          <button class="icon-btn" id="btnSettings" title="Diagram settings"><svg viewBox="0 0 24 24" class="ico"><path d="M4 6h10 M18 6h2 M4 12h4 M12 12h8 M4 18h12 M20 18h0" /><circle cx="16" cy="6" r="2" /><circle cx="10" cy="12" r="2" /><circle cx="18" cy="18" r="2" /></svg></button>
+        </div>
+
+        <aside class="settings" id="settings" hidden>
+          <h3>Diagram</h3>
+          <label class="field-label">Theme</label>
+          <div class="swatches" id="themeSwatches"></div>
+
+          <label class="field-label">Links</label>
+          <div class="segmented" data-opt="linkMode" title="Tree keeps one line per model; click a model to see all its links">
+            <button data-value="auto">Auto</button>
+            <button data-value="tree">Tree</button>
+            <button data-value="hubs">Hubs</button>
+            <button data-value="all">All</button>
+          </div>
+
+          <label class="field-label">Type notation</label>
+          <div class="segmented" data-opt="notation">
+            <button data-value="prisma">String?</button>
+            <button data-value="uml">String [0..1]</button>
+          </div>
+
+          <label class="field-label">Relation marker</label>
+          <div class="segmented" data-opt="marker">
+            <button data-value="triangle">△</button>
+            <button data-value="diamond">◇</button>
+            <button data-value="arrow">→</button>
+            <button data-value="none">—</button>
+          </div>
+
+          <label class="field-label">Show</label>
+          <label class="toggle"><input type="checkbox" data-opt="showRelations" /> Relation fields</label>
+          <label class="toggle"><input type="checkbox" data-opt="showEnums" /> Enums</label>
+          <label class="toggle"><input type="checkbox" data-opt="showDefaults" /> Default values</label>
+          <label class="toggle"><input type="checkbox" data-opt="showProps" /> {id} / {unique} tags</label>
+          <label class="toggle"><input type="checkbox" data-opt="showConstraints" /> @@ constraints</label>
+          <label class="toggle"><input type="checkbox" data-opt="showLabels" /> Edge labels</label>
+          <label class="toggle"><input type="checkbox" data-opt="rounded" /> Rounded corners</label>
+        </aside>
+
+        <div class="tooltip" id="tooltip" hidden></div>
+        <div class="drop-overlay" id="dropOverlay" hidden>
+          <div>Drop your <code>.prisma</code> file</div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="statusbar">
+      <span id="statusProblems" class="status-item ok">No problems</span>
+      <span id="statusCounts" class="status-item"></span>
+      <span id="statusView" class="status-item muted" hidden></span>
+      <div class="spacer"></div>
+      <span id="statusWatch" class="status-item" hidden>Watching file</span>
+      <span class="status-item muted">Ctrl+O open · Ctrl+S save · Ctrl+E export</span>
+    </footer>
+
+    <div class="toast" id="toast" hidden></div>
+  </body>
+</html>
