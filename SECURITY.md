@@ -17,10 +17,11 @@ Prismagram is a single-user desktop application with no server component.
 
 | Concern | Mitigation |
 | --- | --- |
-| Schema privacy | Schemas are parsed and drawn locally. The app makes no network requests. |
+| Schema privacy | Schemas are parsed and drawn locally and never sent anywhere. |
+| Updates | The only network request is the update check: a download of `latest.json` from GitHub Releases. Update packages are signed, and the app verifies them against the public key built into it before installing. |
 | Untrusted schema files | The parser never executes schema content; all text is escaped before it reaches the SVG or the editor. |
 | File access | The webview can only read and write files through four narrow commands (read/write text, write image, modification time), and only for paths the user picked in a dialog, dropped, or passed on the command line. |
-| Tauri permissions | The window has `core:default`, `dialog:default` and permission to set its title. Nothing else. |
+| Tauri permissions | The window has `core:default`, `dialog:default`, `updater:default`, `process:allow-restart` and permission to set its title. Nothing else. |
 
 ## Known limitations
 

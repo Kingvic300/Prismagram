@@ -45,7 +45,9 @@ def main(tag: str) -> None:
             lines.append(f"| **{platform}** | {label} | [{name}]({base}/{name}) ({mb:.0f} MB) | {how.format(name=name)} |")
     lines += [
         "",
-        "Verify a download with `sha256sum -c SHA256SUMS` (Linux) where the checksum file is attached.",
+        "**Already have Prismagram?** It updates itself. The new version downloads in the background and you'll be asked to restart.",
+        "",
+        "You don't need the `.sig`, `.tar.gz` or `latest.json` files; the automatic updater uses them.",
         "",
         "These builds are not code-signed yet, which is why macOS and Windows show a warning the first time.",
     ]

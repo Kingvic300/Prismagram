@@ -655,6 +655,7 @@ code {
 
 .swatch {
   position: relative;
+  width: 100%;
   height: 40px;
   padding: 0;
   border-radius: 8px;
@@ -870,4 +871,55 @@ code {
 ::-webkit-scrollbar-corner,
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* ---------- updates ---------- */
+
+.settings-section {
+  margin-top: 20px !important;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.update-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.version {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.update-status {
+  margin: 8px 0 0;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.update-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 44px;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 16px;
+  transform: translateX(-50%);
+  border-radius: 12px;
+  background: var(--raised);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  animation: pop 0.16s ease-out;
+}
+
+.update-banner > .ico {
+  color: var(--accent);
+}
+
+.update-banner .muted {
+  color: var(--text-2);
 }

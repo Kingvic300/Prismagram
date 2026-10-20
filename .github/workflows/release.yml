@@ -56,6 +56,9 @@ jobs:
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs the auto-update packages; the matching public key is in tauri.conf.json.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: desktop
           tagName: ${{ github.ref_name }}
@@ -68,7 +71,10 @@ jobs:
             - macOS: `.dmg` (`aarch64` for Apple silicon, `x64` for Intel)
             - Windows: `-setup.exe` or `.msi`
 
+            Already have Prismagram? It updates itself: the new version downloads in the background and you'll be asked to restart.
+
             These builds are not code-signed yet. See the README's "Install" section for how to open them on macOS and Windows.
+          includeUpdaterJson: true
           releaseDraft: false
           prerelease: false
           args: --bundles ${{ matrix.bundles }}

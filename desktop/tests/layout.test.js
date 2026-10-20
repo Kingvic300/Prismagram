@@ -145,3 +145,19 @@ test("exported SVG is self-contained", () => {
   assert.ok(!svg.includes('class="hit"'), "interactive hit areas leak into exports");
   assert.ok(svg.includes(">+beakColor</tspan>") && svg.includes("> = &quot;Yellow&quot;</tspan>"));
 });
+
+test("Mermaid export lists every model, enum and relation", async () => {
+  const { toMermaid } = await import("../src/js/mermaid.js");
+  const schema = {
+    ...zoo,
+    enums: [{ name: "Habitat", values: ["land", "water"], doc: null, line: 1 }],
+  };
+  schema.models[0].fields.push(field("habitat", "Habitat", "enum", { optional: true }));
+  const text = toMermaid(schema);
+  assert.match(text, /^classDiagram\n/);
+  assert.match(text, /class Duck \{\n {4}\+String beakColor\n/);
+  assert.match(text, /Animal "1" --> "0\.\.1" Duck : duck/);
+  assert.match(text, /<<enumeration>>\n {4}land\n {4}water/);
+  assert.match(text, /Animal \.\.> Habitat/);
+  assert.ok(!text.includes("("), "parentheses would turn members into methods");
+});

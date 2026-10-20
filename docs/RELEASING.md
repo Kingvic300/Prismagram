@@ -21,6 +21,26 @@ when a version tag is pushed.
 5. The `notes` job rewrites the release notes into a per-platform download table
    (`scripts/release_notes.py`), and the Pages workflow republishes the download page.
 
+## Update signing
+
+Installed copies update themselves from GitHub Releases (`latest.json` plus a `.sig` per
+package). Every update is verified against the public key in
+`desktop/src-tauri/tauri.conf.json` (`plugins.updater.pubkey`), so releases **must** be
+signed with the matching private key or installed apps will refuse them.
+
+- The key pair was created with `npx tauri signer generate` and lives outside the repo:
+  `~/.tauri/prismagram-updater.key` (private), `.key.pub`, and `.password`.
+- CI reads it from two repository secrets: `TAURI_SIGNING_PRIVATE_KEY` (the key file's
+  contents) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Set them once:
+
+  ```bash
+  gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/prismagram-updater.key
+  gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD < ~/.tauri/prismagram-updater.password
+  ```
+
+- **Back the key up.** If it is lost, existing installs can't verify new versions and users
+  must reinstall manually once. Never commit it.
+
 ## Building Linux packages locally
 
 ```bash

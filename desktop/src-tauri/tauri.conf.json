@@ -25,7 +25,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb", "rpm", "appimage"],
+    "targets": [
+      "deb",
+      "rpm",
+      "appimage"
+    ],
     "category": "DeveloperTool",
     "shortDescription": "Prisma schema to UML class diagram",
     "longDescription": "Prismagram reads Prisma schema files and renders them as clean UML class diagrams you can export to SVG or PNG.",
@@ -40,6 +44,18 @@
     "linux": {
       "deb": {
         "depends": []
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY5QUY0NjVEQ0FGRThDMDUKUldRRmpQN0tYVWF2YVNxcVg3MjBMMkFBMWFURzNwZ2d1dFZFVnJFSnhGcXV5MEd1ZEdmZnMrVCsK",
+      "endpoints": [
+        "https://github.com/Kingvic300/Prismagram/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

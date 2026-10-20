@@ -2,6 +2,8 @@ import { buildGraph, layout, quickRoute } from "./layout.js";
 import { renderEdge, renderSVG, THEMES } from "./render.js";
 import { Editor } from "./editor.js";
 import { SAMPLES } from "./samples.js";
+import { toMermaid } from "./mermaid.js";
+import { createUpdater } from "./updater.js";
 
 const tauri = window.__TAURI__;
 const invoke = (cmd, args) => tauri.core.invoke(cmd, args);
@@ -19,6 +21,7 @@ const DEFAULT_OPTIONS = {
   showLabels: true,
   rounded: false,
   linkMode: "auto",
+  autoUpdate: true,
   editorWidth: 440,
   editorHidden: false,
 };
@@ -467,6 +470,17 @@ function exportSVG() {
   return renderSVG(state.diagram, theme(), state.opts, { background: true });
 }
 
+// Image tools and AI chats reject very large images (Groq: ~33 MP), so the default PNG is
+// capped; "full resolution" ignores the cap.
+const PNG_MAX_PIXELS = 30e6;
+const PNG_MAX_SIDE = 8000;
+
+function pngScale(full) {
+  const { width, height } = state.diagram;
+  if (full) return 2;
+  return Math.min(2, Math.sqrt(PNG_MAX_PIXELS / (width * height)), PNG_MAX_SIDE / Math.max(width, height));
+}
+
 async function rasterize(svg, scale = 2) {
   const img = new Image();
   img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
@@ -488,14 +502,25 @@ async function doExport(kind) {
       await navigator.clipboard.writeText(svg);
       return toast("SVG markup copied");
     }
-    const ext = kind === "png" ? "png" : "svg";
+    if (kind === "copy-mermaid") {
+      await navigator.clipboard.writeText(toMermaid(state.schema));
+      return toast("Mermaid diagram copied — paste it into any chat or markdown file");
+    }
+    const ext = kind.startsWith("png") ? "png" : kind === "mermaid" ? "mmd" : "svg";
     const path = await tauri.dialog.save({
       defaultPath: `${exportBaseName()}.${ext}`,
       filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
     });
     if (!path) return;
-    if (kind === "png") await invoke("write_binary_file", { path, base64Data: await rasterize(svg) });
-    else await invoke("write_text_file", { path, contents: `<?xml version="1.0" encoding="UTF-8"?>\n${svg}\n` });
+    if (ext === "png") {
+      const scale = pngScale(kind === "png-full");
+      await invoke("write_binary_file", { path, base64Data: await rasterize(svg, scale) });
+      const w = Math.round(state.diagram.width * scale);
+      const h = Math.round(state.diagram.height * scale);
+      return toast(`Exported ${baseName(path)} (${w} × ${h})`);
+    }
+    const contents = ext === "mmd" ? toMermaid(state.schema) : `<?xml version="1.0" encoding="UTF-8"?>\n${svg}\n`;
+    await invoke("write_text_file", { path, contents });
     toast(`Exported ${baseName(path)}`);
   } catch (err) {
     toast(`Export failed: ${err}`, true);
@@ -612,8 +637,21 @@ $("settings").addEventListener("change", (e) => {
   if (!key) return;
   state.opts[key] = e.target.checked;
   saveOptions();
-  redraw();
+  if (key === "autoUpdate") updater.setAuto(state.opts.autoUpdate);
+  else redraw();
 });
+
+// Updates.
+const updater = createUpdater({
+  banner: $("updateBanner"),
+  onStatus: (text) => {
+    const el = $("updateStatus");
+    el.hidden = !text;
+    el.textContent = text || "";
+  },
+});
+$("btnCheckUpdates").addEventListener("click", () => updater.check({ manual: true }));
+$("btnCheckUpdates").hidden = !updater.available;
 
 // Drag and drop from the file manager.
 if (tauri?.event) {
@@ -689,6 +727,11 @@ async function init() {
   }
   // Wait for fonts so text measurement matches what is drawn.
   await document.fonts?.ready;
+  tauri.app
+    ?.getVersion()
+    .then((v) => ($("appVersion").textContent = `Version ${v}`))
+    .catch(() => {});
+  updater.setAuto(state.opts.autoUpdate);
   const launch = await invoke("launch_file").catch(() => null);
   if (launch) await loadPath(launch);
   else await parseNow();

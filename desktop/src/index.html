@@ -48,7 +48,10 @@
         </button>
         <div class="menu right" id="menuExport" hidden>
           <button data-export="png">PNG image <small>Ctrl+Shift+E</small></button>
+          <button data-export="png-full">PNG full resolution <small>large</small></button>
           <button data-export="svg">SVG vector <small>Ctrl+E</small></button>
+          <button data-export="mermaid">Mermaid diagram <small>.mmd</small></button>
+          <button data-export="copy-mermaid">Copy as Mermaid <small>for AI chats</small></button>
           <button data-export="copy">Copy SVG markup</button>
         </div>
       </div>
@@ -141,6 +144,14 @@
           <label class="toggle"><input type="checkbox" data-opt="showConstraints" /> @@ constraints</label>
           <label class="toggle"><input type="checkbox" data-opt="showLabels" /> Edge labels</label>
           <label class="toggle"><input type="checkbox" data-opt="rounded" /> Rounded corners</label>
+
+          <h3 class="settings-section">App</h3>
+          <label class="toggle"><input type="checkbox" data-opt="autoUpdate" /> Install updates automatically</label>
+          <div class="update-row">
+            <button class="btn" id="btnCheckUpdates">Check for updates</button>
+            <span id="appVersion" class="version"></span>
+          </div>
+          <p class="update-status" id="updateStatus" hidden></p>
         </aside>
 
         <div class="tooltip" id="tooltip" hidden></div>
@@ -158,6 +169,13 @@
       <span id="statusWatch" class="status-item" hidden>Watching file</span>
       <span class="status-item muted">Ctrl+O open · Ctrl+S save · Ctrl+E export</span>
     </footer>
+
+    <div class="update-banner" id="updateBanner" role="status" hidden>
+      <svg viewBox="0 0 24 24" class="ico"><path d="M12 3v12 M7 10l5 5 5-5 M4 21h16" /></svg>
+      <span>Prismagram <b data-version></b> is ready. <span class="muted">Restart to finish updating.</span></span>
+      <button class="btn primary" data-restart>Restart now</button>
+      <button class="icon-btn" data-later title="Later"><svg viewBox="0 0 24 24" class="ico"><path d="M6 6l12 12 M18 6L6 18" /></svg></button>
+    </div>
 
     <div class="toast" id="toast" hidden></div>
   </body>

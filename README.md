@@ -16,7 +16,10 @@ redraws as you type. Export to PNG or SVG.
   reloads it when it changes on disk.
 - **Readable at any size**: small schemas show every link; large ones switch to a tree view
   with one line per model, and you click a model to see all of its links.
-- **Offline and private**: no network access, no telemetry.
+- **Updates itself**: new versions download in the background; click **Restart now** and
+  you're on the latest. No reinstalling.
+- **Private**: your schema never leaves your computer. The only network request is the
+  update check, a plain file download from GitHub Releases. No telemetry.
 
 Licensed under [MIT](LICENSE).
 
@@ -45,6 +48,11 @@ Then start **Prismagram** from your applications menu, or from a terminal:
 prismagram                       # empty editor
 prismagram path/to/schema.prisma # open a schema
 ```
+
+Once installed, Prismagram keeps itself up to date: it checks GitHub Releases shortly after
+launch and every few hours, downloads new versions in the background, and shows a
+**Restart now** banner. Turn this off in Settings → App. The AppImage updates in place
+without a password; the `.deb` and `.rpm` ask for your password to install the update.
 
 **macOS and Windows** builds are attached to each release too. They are not code-signed yet:
 on macOS right-click the app and choose Open the first time; on Windows choose
