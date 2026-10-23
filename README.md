@@ -16,10 +16,13 @@ redraws as you type. Export to PNG or SVG.
   reloads it when it changes on disk.
 - **Readable at any size**: small schemas show every link; large ones switch to a tree view
   with one line per model, and you click a model to see all of its links.
+- **Supabase import**: paste your Supabase (or any PostgreSQL) connection string and
+  Prismagram reads the tables, enums and foreign keys and draws them. Read-only.
 - **Updates itself**: new versions download in the background; click **Restart now** and
   you're on the latest. No reinstalling.
-- **Private**: your schema never leaves your computer. The only network request is the
-  update check, a plain file download from GitHub Releases. No telemetry.
+- **Private**: your schema never leaves your computer. The update check is a plain file
+  download from GitHub Releases; the only other connection is the one you ask for, from
+  your computer straight to your database. No telemetry.
 
 Licensed under [MIT](LICENSE).
 
@@ -63,6 +66,7 @@ More info → Run anyway if SmartScreen warns you.
 | Action | How |
 | --- | --- |
 | Open a schema | **Open** (<kbd>Ctrl</kbd>+<kbd>O</kbd>), drag a `.prisma` file onto the window, or pass it on the command line |
+| Import a database | **Supabase**, then paste a connection string. See [Importing from Supabase](#importing-from-supabase) |
 | Edit | Type in the editor on the left. Errors and warnings show in the gutter and the problems list |
 | Save the schema | <kbd>Ctrl</kbd>+<kbd>S</kbd> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> to save as) |
 | Pan / zoom | Drag the canvas; mouse wheel to zoom; <kbd>Ctrl</kbd>+<kbd>0</kbd> to fit |
@@ -83,6 +87,24 @@ More info → Run anyway if SmartScreen warns you.
 
 Not sure what to try? **Samples** has three schemas, including the classic Animal / Duck /
 Fish / Zebra example.
+
+### Importing from Supabase
+
+1. In Supabase, open your project, click **Connect** and copy the **Session pooler**
+   connection string. (The direct connection needs IPv6, which many networks don't have.)
+2. In Prismagram, click **Supabase**, paste the string and type your database password.
+   It replaces `[YOUR-PASSWORD]` in the string.
+3. Click **Import**. The tables, views, enums, indexes and foreign keys become a Prisma
+   schema in the editor, and the diagram draws. Save it with <kbd>Ctrl</kbd>+<kbd>S</kbd>.
+
+Only `public` is read by default. Add `auth` under **Schemas** to include Supabase's users
+table and the links to it. Any PostgreSQL connection string works the same way, including
+a `DATABASE_URL=...` line from a `.env` file.
+
+Prismagram reads only the structure: no rows, and nothing is written. The password is never
+saved; the connection string is remembered with `[YOUR-PASSWORD]` in its place. The
+connection is encrypted; to also verify Supabase's certificate, download it from
+Database Settings → SSL and add `?sslmode=verify-full&sslrootcert=/path/to/prod-supabase.cer`.
 
 ## How the diagram is drawn
 
@@ -125,7 +147,7 @@ scripts/build-linux.sh        # .deb, .rpm and AppImage into release/
 ```
 
 ```
-core/       Rust crate: the Prisma parser
+core/       Rust crate: the Prisma parser, and the PostgreSQL-to-Prisma generator
 desktop/    Tauri app: frontend in src/, Rust shell in src-tauri/, tests in tests/
 docs/       architecture and release process
 scripts/    setup, dev, test and build helpers

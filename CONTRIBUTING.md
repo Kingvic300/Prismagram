@@ -5,9 +5,10 @@ small, offline desktop app, and a few rules keep it that way.
 
 ## Ground rules
 
-1. **Private.** The app never sends a schema anywhere. The only network request is the
-   signed update check. PRs that add analytics, crash reporting, remote fonts or other
-   network calls will be declined.
+1. **Private.** The app never sends a schema anywhere. The only network requests are the
+   signed update check and the database connection the user starts with **Import**. PRs
+   that add analytics, crash reporting, remote fonts or other network calls will be
+   declined.
 2. **Never fail on a schema.** The parser is forgiving: problems become diagnostics, and the
    diagram keeps rendering whatever was understood. A crash or a blank canvas is a bug.
 3. **Readable diagrams first.** Layout changes must not tangle large schemas. Check the

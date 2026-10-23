@@ -1,3 +1,5 @@
+mod database;
+
 use prismagram_core as prisma;
 
 use base64::Engine;
@@ -37,6 +39,16 @@ fn file_modified(path: String) -> Result<u64, String> {
         .unwrap_or(0))
 }
 
+/// Reads the schema of a live PostgreSQL database (e.g. Supabase) as Prisma schema text.
+#[tauri::command]
+async fn pull_database(
+    url: String,
+    password: String,
+    schemas: Vec<String>,
+) -> Result<database::Pulled, String> {
+    database::pull(&url, &password, &schemas).await
+}
+
 /// A `.prisma` path passed on the command line (e.g. "Open with Prismagram").
 #[tauri::command]
 fn launch_file() -> Option<String> {
@@ -63,7 +75,8 @@ pub fn run() {
             write_text_file,
             write_binary_file,
             file_modified,
-            launch_file
+            launch_file,
+            pull_database
         ])
         .run(tauri::generate_context!())
         .expect("error while running Prismagram");

@@ -4,6 +4,7 @@ import { Editor } from "./editor.js";
 import { SAMPLES } from "./samples.js";
 import { toMermaid } from "./mermaid.js";
 import { createUpdater } from "./updater.js";
+import { createDatabaseImport } from "./database.js";
 
 const tauri = window.__TAURI__;
 const invoke = (cmd, args) => tauri.core.invoke(cmd, args);
@@ -440,6 +441,29 @@ async function loadSample(key) {
   await parseNow();
 }
 
+const databaseImport = createDatabaseImport({
+  dialog: $("dbDialog"),
+  invoke,
+  onImported: async ({ schema, source, tables, views, enums }) => {
+    state.path = null;
+    state.focus = null;
+    state.needsFit = true;
+    $("statusWatch").hidden = true;
+    editor.value = schema;
+    // Not saved anywhere yet: Save asks where to put it.
+    setDirty(true);
+    await parseNow();
+    const counts = [[tables, "table"], [views, "view"], [enums, "enum"]]
+      .filter(([n]) => n)
+      .map(([n, word]) => `${n} ${word}${n === 1 ? "" : "s"}`);
+    toast(`Imported ${counts.join(", ")} from ${source}`);
+  },
+});
+
+async function openDatabase() {
+  if (await confirmDiscard()) databaseImport.open();
+}
+
 // Reload the file when it changes on disk (e.g. edited in VS Code), unless there are local edits.
 setInterval(async () => {
   if (!state.path || state.dirty) return;
@@ -560,6 +584,8 @@ document.addEventListener("click", (e) => {
 $("btnOpen").addEventListener("click", openFile);
 $("emptyOpen").addEventListener("click", openFile);
 $("emptySample").addEventListener("click", () => loadSample("zoo"));
+$("btnDatabase").addEventListener("click", openDatabase);
+$("emptyDatabase").addEventListener("click", openDatabase);
 $("btnSave").addEventListener("click", () => saveFile());
 $("zoomIn").addEventListener("click", () => zoomAt(1.2, undefined, undefined, true));
 $("zoomOut").addEventListener("click", () => zoomAt(1 / 1.2, undefined, undefined, true));

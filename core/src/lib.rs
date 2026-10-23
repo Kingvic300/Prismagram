@@ -8,6 +8,8 @@
 use serde::Serialize;
 use std::collections::HashSet;
 
+pub mod introspect;
+
 const SCALARS: &[&str] = &[
     "String", "Boolean", "Int", "BigInt", "Float", "Decimal", "DateTime", "Json", "Bytes",
 ];

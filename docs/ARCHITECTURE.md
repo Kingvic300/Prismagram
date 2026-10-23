@@ -28,11 +28,31 @@ schema.prisma ──► core (Rust) ──► JSON model ──► layout.js ─
 
 Nothing panics: malformed input becomes a `Diagnostic` with a line number.
 
+### Database import (`introspect`)
+
+`introspect::catalog_query(schemas)` is one read-only SQL statement over `pg_catalog` that
+returns every table, view, column, index, foreign key and enum in the chosen schemas as a
+single JSON value. `introspect::to_prisma(&Catalog, source)` turns that into Prisma schema
+text the way `prisma db pull` does: Postgres types become Prisma scalars plus `@db.*`
+native types, defaults become `@default(...)`, names that aren't valid identifiers get
+`@map`, and each foreign key becomes a relation field on both models (named with the
+constraint when two models are linked more than once). Foreign keys to tables that weren't
+pulled stay plain columns with a `// references ...` comment. Both functions are pure; the
+tests feed a catalog in and parse the output with `parse()`.
+
 ## desktop/src-tauri — the shell
 
 A thin Tauri 2 app. Commands: `parse_schema`, `read_text_file`, `write_text_file`,
-`write_binary_file`, `file_modified` (for auto-reload) and `launch_file` (a path passed on
-the command line). On Linux it disables WebKitGTK's DMA-BUF renderer, which shows a blank
+`write_binary_file`, `file_modified` (for auto-reload), `launch_file` (a path passed on
+the command line) and `pull_database`.
+
+`pull_database` (`database.rs`) connects with `tokio-postgres` over rustls, runs the
+catalog query with the simple query protocol (so it works through Supabase's pooler in
+transaction mode too) and returns the generated schema. It accepts Supabase's
+`[YOUR-PASSWORD]` placeholder plus a separate password, a `DATABASE_URL=...` line, and
+libpq's `sslmode` values; Prisma-only URL options such as `pgbouncer=true` are dropped.
+Errors are rewritten with hints for the usual Supabase mistakes (IPv6-only direct host,
+pooler user name). On Linux it disables WebKitGTK's DMA-BUF renderer, which shows a blank
 window on many GPU drivers.
 
 ## desktop/src/js — layout and rendering

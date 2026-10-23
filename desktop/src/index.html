@@ -33,6 +33,10 @@
           <button data-sample="shop">Shop <small>orders, products, enums</small></button>
         </div>
       </div>
+      <button class="btn ghost" id="btnDatabase" title="Import the schema of a Supabase or PostgreSQL database">
+        <svg viewBox="0 0 24 24" class="ico"><ellipse cx="12" cy="5.5" rx="8" ry="2.5" /><path d="M4 5.5v13c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-13 M4 12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5" /></svg>
+        Supabase
+      </button>
       <button class="btn ghost" id="btnOpen" title="Open schema (Ctrl+O)">
         <svg viewBox="0 0 24 24" class="ico"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
         Open
@@ -84,9 +88,10 @@
         <div class="empty" id="emptyState">
           <img src="logo.svg" alt="" width="72" height="72" />
           <h1>Draw your Prisma schema</h1>
-          <p>Open or drop a <code>.prisma</code> file, or start typing in the editor. The diagram updates as you type.</p>
+          <p>Open or drop a <code>.prisma</code> file, connect a Supabase database, or start typing in the editor. The diagram updates as you type.</p>
           <div class="row">
             <button class="btn primary" id="emptyOpen">Open file</button>
+            <button class="btn" id="emptyDatabase">Connect Supabase</button>
             <button class="btn" id="emptySample">Try a sample</button>
           </div>
         </div>
@@ -176,6 +181,33 @@
       <button class="btn primary" data-restart>Restart now</button>
       <button class="icon-btn" data-later title="Later"><svg viewBox="0 0 24 24" class="ico"><path d="M6 6l12 12 M18 6L6 18" /></svg></button>
     </div>
+
+    <dialog class="dialog" id="dbDialog">
+      <form id="dbForm">
+        <h2>Import from Supabase</h2>
+        <p class="hint">Reads the tables, columns, enums and foreign keys, and writes them as a Prisma schema. Only the structure is read: no rows, and nothing is changed.</p>
+
+        <label class="field-label" for="dbUrl">Connection string</label>
+        <input id="dbUrl" class="input mono" spellcheck="false" autocomplete="off" autocapitalize="off"
+          placeholder="postgresql://postgres.abcd:[YOUR-PASSWORD]@aws-0-eu-west-1.pooler.supabase.com:5432/postgres" />
+        <p class="hint">In Supabase open your project, click <b>Connect</b> and copy the <b>Session pooler</b> string. Any PostgreSQL URL works.</p>
+
+        <label class="field-label" for="dbPassword">Database password</label>
+        <input id="dbPassword" class="input" type="password" autocomplete="off" placeholder="Replaces [YOUR-PASSWORD]" />
+
+        <label class="field-label" for="dbSchemas">Schemas</label>
+        <input id="dbSchemas" class="input mono" spellcheck="false" autocomplete="off" value="public" />
+        <p class="hint">Comma-separated. Add <code>auth</code> to include Supabase's users table.</p>
+
+        <p class="dialog-error" id="dbError" role="alert" hidden></p>
+
+        <div class="dialog-actions">
+          <span class="note">The password is never saved.</span>
+          <button type="button" class="btn" id="dbCancel">Cancel</button>
+          <button type="submit" class="btn primary" id="dbImport">Import</button>
+        </div>
+      </form>
+    </dialog>
 
     <div class="toast" id="toast" hidden></div>
   </body>
