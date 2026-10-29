@@ -5,6 +5,7 @@ import { SAMPLES } from "./samples.js";
 import { toMermaid } from "./mermaid.js";
 import { createUpdater } from "./updater.js";
 import { createDatabaseImport } from "./database.js";
+import { createDataClient } from "./client.js";
 
 const tauri = window.__TAURI__;
 const invoke = (cmd, args) => tauri.core.invoke(cmd, args);
@@ -25,6 +26,7 @@ const DEFAULT_OPTIONS = {
   autoUpdate: true,
   editorWidth: 440,
   editorHidden: false,
+  mode: "diagram",
 };
 
 const state = {
@@ -96,7 +98,7 @@ function updateStatus() {
   const errors = s.diagnostics.filter((d) => d.severity === "error").length;
   const warnings = s.diagnostics.length - errors;
   const el = $("statusProblems");
-  el.className = "status-item " + (errors ? "bad" : warnings ? "warn" : "ok");
+  el.className = "status-item diagram-only " + (errors ? "bad" : warnings ? "warn" : "ok");
   el.textContent = errors || warnings
     ? [errors && `${errors} error${errors > 1 ? "s" : ""}`, warnings && `${warnings} warning${warnings > 1 ? "s" : ""}`].filter(Boolean).join(" · ")
     : "No problems";
@@ -165,7 +167,8 @@ function redraw() {
   applyTheme();
   if (state.focus && !state.diagram.byId.has(state.focus)) state.focus = null;
   applyFocus();
-  if (state.needsFit) {
+  // A hidden canvas has no size to fit to: fit when Diagram mode is shown.
+  if (state.needsFit && !$("workspace").hidden) {
     state.needsFit = false;
     fit(false);
   }
@@ -441,28 +444,75 @@ async function loadSample(key) {
   await parseNow();
 }
 
+async function showImported({ schema, source, tables, views, enums }) {
+  state.path = null;
+  state.focus = null;
+  state.needsFit = true;
+  $("statusWatch").hidden = true;
+  editor.value = schema;
+  // Not saved anywhere yet: Save asks where to put it.
+  setDirty(true);
+  await parseNow();
+  const counts = [[tables, "table"], [views, "view"], [enums, "enum"]]
+    .filter(([n]) => n)
+    .map(([n, word]) => `${n} ${word}${n === 1 ? "" : "s"}`);
+  toast(`Imported ${counts.join(", ")} from ${source}`);
+}
+
 const databaseImport = createDatabaseImport({
   dialog: $("dbDialog"),
   invoke,
-  onImported: async ({ schema, source, tables, views, enums }) => {
-    state.path = null;
-    state.focus = null;
-    state.needsFit = true;
-    $("statusWatch").hidden = true;
-    editor.value = schema;
-    // Not saved anywhere yet: Save asks where to put it.
-    setDirty(true);
-    await parseNow();
-    const counts = [[tables, "table"], [views, "view"], [enums, "enum"]]
-      .filter(([n]) => n)
-      .map(([n, word]) => `${n} ${word}${n === 1 ? "" : "s"}`);
-    toast(`Imported ${counts.join(", ")} from ${source}`);
-  },
+  onImported: showImported,
 });
 
 async function openDatabase() {
   if (await confirmDiscard()) databaseImport.open();
 }
+
+// ---------------------------------------------------------------- data mode
+
+const dataClient = createDataClient({
+  dialog: $("connDialog"),
+  invoke,
+  tauri,
+  toast,
+  onStatus: (text) => ($("statusData").textContent = text),
+  // "Diagram" on a PostgreSQL schema: import it like the Supabase dialog does, then show it.
+  onDiagram: async ({ url, password, schemas }) => {
+    if (!(await confirmDiscard())) return;
+    toast(`Reading ${schemas.join(", ")}…`);
+    try {
+      const result = await invoke("pull_database", { url, password, schemas });
+      setMode("diagram");
+      await showImported(result);
+    } catch (err) {
+      toast(String(err), true);
+    }
+  },
+});
+
+function setMode(mode) {
+  state.opts.mode = mode === "data" ? "data" : "diagram";
+  const data = state.opts.mode === "data";
+  document.body.classList.toggle("mode-data", data);
+  $("workspace").hidden = data;
+  $("dataspace").hidden = !data;
+  $("modeSwitch")
+    .querySelectorAll("button")
+    .forEach((b) => b.classList.toggle("active", b.dataset.mode === state.opts.mode));
+  hideTooltip();
+  setSettings(false);
+  saveOptions();
+  // The canvas had no size while hidden.
+  if (!data && state.needsFit) redraw();
+  else if (!data && state.diagram) applyView();
+}
+
+$("modeSwitch").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-mode]");
+  if (b) setMode(b.dataset.mode);
+});
+$("btnNewConnection").addEventListener("click", () => dataClient.openDialog());
 
 // Reload the file when it changes on disk (e.g. edited in VS Code), unless there are local edits.
 setInterval(async () => {
@@ -642,7 +692,7 @@ function renderSettings() {
   document.querySelectorAll(".swatch i").forEach((i) => {
     i.style.backgroundImage = `linear-gradient(${i.style.getPropertyValue("--h")} 0 8px, transparent 8px)`;
   });
-  document.querySelectorAll(".segmented").forEach((seg) => {
+  document.querySelectorAll(".segmented[data-opt]").forEach((seg) => {
     seg.querySelectorAll("button").forEach((b) => b.classList.toggle("active", state.opts[seg.dataset.opt] === b.dataset.value));
   });
   document.querySelectorAll("input[data-opt]").forEach((input) => (input.checked = Boolean(state.opts[input.dataset.opt])));
@@ -696,6 +746,14 @@ if (tauri?.event) {
 // Keyboard shortcuts.
 document.addEventListener("keydown", (e) => {
   const mod = e.ctrlKey || e.metaKey;
+  if (mod && (e.key === "1" || e.key === "2")) {
+    e.preventDefault();
+    return setMode(e.key === "1" ? "diagram" : "data");
+  }
+  if (state.opts.mode === "data") {
+    if (dataClient.handleKey(e)) e.preventDefault();
+    return;
+  }
   if (e.key === "Escape") {
     state.focus = null;
     applyFocus();
@@ -743,6 +801,7 @@ window.addEventListener("resize", () => state.diagram && applyView());
 async function init() {
   document.documentElement.style.setProperty("--editor-width", `${state.opts.editorWidth}px`);
   $("workspace").classList.toggle("editor-hidden", state.opts.editorHidden);
+  setMode(state.opts.mode);
   renderSettings();
   applyTheme();
   applyView();
@@ -759,7 +818,10 @@ async function init() {
     .catch(() => {});
   updater.setAuto(state.opts.autoUpdate);
   const launch = await invoke("launch_file").catch(() => null);
-  if (launch) await loadPath(launch);
+  if (launch) {
+    setMode("diagram");
+    await loadPath(launch);
+  }
   else await parseNow();
 }
 

@@ -18,6 +18,10 @@ redraws as you type. Export to PNG or SVG.
   with one line per model, and you click a model to see all of its links.
 - **Supabase import**: paste your Supabase (or any PostgreSQL) connection string and
   Prismagram reads the tables, enums and foreign keys and draws them. Read-only.
+- **Data mode**: switch from **Diagram** to **Data** to browse a PostgreSQL, Supabase or
+  MongoDB database, in the style of MongoDB Compass: every table and collection, its rows as
+  documents, a table or JSON view, filters, schema analysis, indexes, and a SQL or
+  aggregation editor.
 - **Updates itself**: new versions download in the background; click **Restart now** and
   you're on the latest. No reinstalling.
 - **Private**: your schema never leaves your computer. The update check is a plain file
@@ -30,6 +34,7 @@ Licensed under [MIT](LICENSE).
 
 - [Install (Linux / Kali)](#install-linux--kali)
 - [Using Prismagram](#using-prismagram)
+- [Browsing data](#browsing-data)
 - [How the diagram is drawn](#how-the-diagram-is-drawn)
 - [Development](#development)
 - [Architecture](docs/ARCHITECTURE.md) · [Releasing](docs/RELEASING.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
@@ -105,6 +110,30 @@ Prismagram reads only the structure: no rows, and nothing is written. The passwo
 saved; the connection string is remembered with `[YOUR-PASSWORD]` in its place. The
 connection is encrypted; to also verify Supabase's certificate, download it from
 Database Settings → SSL and add `?sslmode=verify-full&sslrootcert=/path/to/prod-supabase.cer`.
+
+## Browsing data
+
+Click **Data** at the top left (<kbd>Ctrl</kbd>+<kbd>2</kbd>; <kbd>Ctrl</kbd>+<kbd>1</kbd> goes
+back to the diagram), then **New connection**, and paste a connection string:
+
+- PostgreSQL or Supabase: `postgresql://user:password@host:5432/db`
+- MongoDB or Atlas: `mongodb://localhost:27017/app` or `mongodb+srv://user:<db_password>@cluster0.abcd.mongodb.net/`
+
+Type the password in the **Password** field to fill in `<db_password>` or `[YOUR-PASSWORD]`.
+Several connections can be open at once. The sidebar lists each database (MongoDB) or schema
+(PostgreSQL) and its collections or tables; click one to open it in a tab.
+
+| Tab | What it shows |
+| --- | --- |
+| **Documents** / **Rows** | Rows as documents, a table or JSON, 20 to 100 per page. Expand nested objects and arrays. Filter with a MongoDB query (`{ status: 'active', createdAt: { $gt: ISODate('2026-01-01') } }`) or a SQL `WHERE` clause (`status = 'active'`); **Options** adds sort and projection. **Export** copies the page as JSON or saves it as JSON or CSV |
+| **Schema** | PostgreSQL: columns, types, defaults, primary and foreign keys. MongoDB: the fields of 200 sampled documents, with their types and how often they appear |
+| **Indexes** | Each index and its definition |
+| **SQL** / **Aggregations** | Any SQL (several statements are fine; up to 2,000 rows per result are shown), or a MongoDB aggregation pipeline. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> runs it |
+
+On a PostgreSQL schema, **Diagram** imports it as a Prisma schema and switches to the
+diagram. SQL runs as typed, so statements such as `update` and `delete` change your data;
+the other tabs only read. Passwords are never saved: connections are remembered with the
+password replaced by a placeholder, and you type it again to reconnect.
 
 ## How the diagram is drawn
 

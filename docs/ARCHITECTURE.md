@@ -44,7 +44,7 @@ tests feed a catalog in and parse the output with `parse()`.
 
 A thin Tauri 2 app. Commands: `parse_schema`, `read_text_file`, `write_text_file`,
 `write_binary_file`, `file_modified` (for auto-reload), `launch_file` (a path passed on
-the command line) and `pull_database`.
+the command line), `pull_database`, and the `client_*` commands of Data mode.
 
 `pull_database` (`database.rs`) connects with `tokio-postgres` over rustls, runs the
 catalog query with the simple query protocol (so it works through Supabase's pooler in
@@ -54,6 +54,26 @@ libpq's `sslmode` values; Prisma-only URL options such as `pgbouncer=true` are d
 Errors are rewritten with hints for the usual Supabase mistakes (IPv6-only direct host,
 pooler user name). On Linux it disables WebKitGTK's DMA-BUF renderer, which shows a blank
 window on many GPU drivers.
+
+### Data mode (`client.rs`)
+
+The `client_*` commands back the database browser. `client::Connections`, held in Tauri
+state, keeps each open connection under an id: a `tokio_postgres::Client` (opened with the
+same `parse_target` / `connect` as the import) or a `mongodb::Client`. The UI asks for
+databases (MongoDB) or schemas with their tables (PostgreSQL), pages of rows (`client_find`),
+columns, indexes, SQL (`client_sql`, simple query protocol, several statements allowed) and
+aggregation pipelines (`client_aggregate`).
+
+PostgreSQL rows come from `json_agg` over `select * ... where <filter> order by <sort> limit
+<n> offset <m>`, and the column types from preparing the same query. Tables estimated at over
+a million rows show `reltuples` instead of an exact count. MongoDB documents are sent as
+relaxed Extended JSON (`{"$oid": ...}`, `{"$date": ...}`); `serde_json`'s `preserve_order`
+keeps their field order. Filters typed in mongosh syntax are turned into Extended JSON by
+`values.js` (`parseShell`) and parsed back into BSON in Rust.
+
+`client.js` draws the sidebar, tabs and views; `values.js` holds the pure parts (the query
+parser, type names, mongosh-style printing, schema inference from sampled documents, CSV),
+tested in `tests/values.test.js`.
 
 ## desktop/src/js — layout and rendering
 

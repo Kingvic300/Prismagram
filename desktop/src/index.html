@@ -13,16 +13,26 @@
         <img src="logo.svg" alt="" width="26" height="26" />
         <span>Prismagram</span>
       </div>
-      <div class="file-chip" id="fileChip" title="No file open">
+      <div class="segmented mode-switch" id="modeSwitch" role="tablist">
+        <button data-mode="diagram" title="Draw a Prisma schema (Ctrl+1)">
+          <svg viewBox="0 0 24 24" class="ico"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /><path d="M10 6.5h4a2 2 0 0 1 2 2V14" /></svg>
+          Diagram
+        </button>
+        <button data-mode="data" title="Browse and query a database (Ctrl+2)">
+          <svg viewBox="0 0 24 24" class="ico"><ellipse cx="12" cy="5.5" rx="8" ry="2.5" /><path d="M4 5.5v13c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-13 M4 12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5" /></svg>
+          Data
+        </button>
+      </div>
+      <div class="file-chip diagram-only" id="fileChip" title="No file open">
         <svg viewBox="0 0 24 24" class="ico"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z M14 3v5h5" /></svg>
         <span id="fileName">untitled.prisma</span>
         <span class="dirty-dot" id="dirtyDot" hidden></span>
       </div>
       <div class="spacer"></div>
-      <button class="btn ghost" id="btnToggleEditor" title="Toggle editor (Ctrl+B)">
+      <button class="btn ghost diagram-only" id="btnToggleEditor" title="Toggle editor (Ctrl+B)">
         <svg viewBox="0 0 24 24" class="ico"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></svg>
       </button>
-      <div class="menu-wrap">
+      <div class="menu-wrap diagram-only">
         <button class="btn ghost" id="btnSamples">
           <svg viewBox="0 0 24 24" class="ico"><path d="M12 3l9 5-9 5-9-5 9-5z M3 13l9 5 9-5" /></svg>
           Samples
@@ -33,19 +43,23 @@
           <button data-sample="shop">Shop <small>orders, products, enums</small></button>
         </div>
       </div>
-      <button class="btn ghost" id="btnDatabase" title="Import the schema of a Supabase or PostgreSQL database">
+      <button class="btn ghost diagram-only" id="btnDatabase" title="Import the schema of a Supabase or PostgreSQL database">
         <svg viewBox="0 0 24 24" class="ico"><ellipse cx="12" cy="5.5" rx="8" ry="2.5" /><path d="M4 5.5v13c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-13 M4 12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5" /></svg>
         Supabase
       </button>
-      <button class="btn ghost" id="btnOpen" title="Open schema (Ctrl+O)">
+      <button class="btn ghost diagram-only" id="btnOpen" title="Open schema (Ctrl+O)">
         <svg viewBox="0 0 24 24" class="ico"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
         Open
       </button>
-      <button class="btn ghost" id="btnSave" title="Save schema (Ctrl+S)">
+      <button class="btn ghost diagram-only" id="btnSave" title="Save schema (Ctrl+S)">
         <svg viewBox="0 0 24 24" class="ico"><path d="M5 3h11l5 5v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M7 3v6h8V3 M7 21v-7h10v7" /></svg>
         Save
       </button>
-      <div class="menu-wrap">
+      <button class="btn primary data-only" id="btnNewConnection" title="Connect to a database">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M12 5v14 M5 12h14" /></svg>
+        New connection
+      </button>
+      <div class="menu-wrap diagram-only">
         <button class="btn primary" id="btnExport" title="Export diagram">
           <svg viewBox="0 0 24 24" class="ico"><path d="M12 3v12 M7 10l5 5 5-5 M4 21h16" /></svg>
           Export
@@ -166,13 +180,40 @@
       </section>
     </main>
 
+    <main class="dataspace" id="dataspace" hidden>
+      <aside class="db-sidebar">
+        <div class="db-side-head">
+          <span>Connections <b id="dbConnCount">0</b></span>
+          <button class="icon-btn" id="dbAddConnection" title="New connection"><svg viewBox="0 0 24 24" class="ico"><path d="M12 5v14 M5 12h14" /></svg></button>
+        </div>
+        <div class="db-side-search">
+          <svg viewBox="0 0 24 24" class="ico"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
+          <input id="dbSearch" placeholder="Search tables and collections" spellcheck="false" autocomplete="off" />
+        </div>
+        <div class="db-tree" id="dbTree"></div>
+      </aside>
+      <section class="db-main">
+        <div class="db-tabs" id="dbTabs"></div>
+        <div class="db-view" id="dbView"></div>
+        <div class="db-welcome" id="dbWelcome">
+          <svg viewBox="0 0 24 24" class="ico welcome-ico"><ellipse cx="12" cy="5.5" rx="8" ry="2.5" /><path d="M4 5.5v13c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5v-13 M4 12c0 1.4 3.6 2.5 8 2.5s8-1.1 8-2.5" /></svg>
+          <h1>Browse your data</h1>
+          <p>Paste a PostgreSQL, Supabase or MongoDB connection string to see every table and collection, page through rows, and run queries.</p>
+          <button class="btn primary" id="dbWelcomeConnect">New connection</button>
+          <div class="db-recent" id="dbRecent"></div>
+        </div>
+      </section>
+    </main>
+
     <footer class="statusbar">
-      <span id="statusProblems" class="status-item ok">No problems</span>
-      <span id="statusCounts" class="status-item"></span>
-      <span id="statusView" class="status-item muted" hidden></span>
+      <span id="statusProblems" class="status-item ok diagram-only">No problems</span>
+      <span id="statusCounts" class="status-item diagram-only"></span>
+      <span id="statusView" class="status-item muted diagram-only" hidden></span>
+      <span id="statusData" class="status-item data-only"></span>
       <div class="spacer"></div>
-      <span id="statusWatch" class="status-item" hidden>Watching file</span>
-      <span class="status-item muted">Ctrl+O open · Ctrl+S save · Ctrl+E export</span>
+      <span id="statusWatch" class="status-item diagram-only" hidden>Watching file</span>
+      <span class="status-item muted diagram-only">Ctrl+O open · Ctrl+S save · Ctrl+E export</span>
+      <span class="status-item muted data-only">Ctrl+Enter run · Ctrl+1 diagram · Ctrl+2 data</span>
     </footer>
 
     <div class="update-banner" id="updateBanner" role="status" hidden>
@@ -205,6 +246,32 @@
           <span class="note">The password is never saved.</span>
           <button type="button" class="btn" id="dbCancel">Cancel</button>
           <button type="submit" class="btn primary" id="dbImport">Import</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="dialog" id="connDialog">
+      <form id="connForm">
+        <h2>New connection</h2>
+        <p class="hint">PostgreSQL, Supabase and MongoDB (including Atlas). The connection stays open until you disconnect it.</p>
+
+        <label class="field-label" for="connUrl">Connection string</label>
+        <input id="connUrl" class="input mono" spellcheck="false" autocomplete="off" autocapitalize="off"
+          placeholder="mongodb+srv://user:<db_password>@cluster0.abcd.mongodb.net/" />
+        <p class="hint">
+          <code>postgresql://user:pass@host:5432/db</code> · <code>mongodb://localhost:27017/app</code> ·
+          a whole <code>DATABASE_URL=…</code> line from <code>.env</code> works too.
+        </p>
+
+        <label class="field-label" for="connPassword">Password</label>
+        <input id="connPassword" class="input" type="password" autocomplete="off" placeholder="Replaces <db_password> or [YOUR-PASSWORD]" />
+
+        <p class="dialog-error" id="connError" role="alert" hidden></p>
+
+        <div class="dialog-actions">
+          <span class="note">Passwords are never saved.</span>
+          <button type="button" class="btn" id="connCancel">Cancel</button>
+          <button type="submit" class="btn primary" id="connSubmit">Connect</button>
         </div>
       </form>
     </dialog>

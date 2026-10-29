@@ -1,9 +1,11 @@
+mod client;
 mod database;
 
 use prismagram_core as prisma;
 
 use base64::Engine;
 use std::time::UNIX_EPOCH;
+use tauri::State;
 
 #[tauri::command]
 fn parse_schema(source: String) -> prisma::Schema {
@@ -49,6 +51,92 @@ async fn pull_database(
     database::pull(&url, &password, &schemas).await
 }
 
+// The data browser: connections stay open in `client::Connections` until disconnected.
+
+#[tauri::command]
+async fn client_connect(
+    connections: State<'_, client::Connections>,
+    url: String,
+    password: String,
+) -> Result<client::Connected, String> {
+    connections.connect(&url, &password).await
+}
+
+#[tauri::command]
+fn client_disconnect(connections: State<'_, client::Connections>, id: String) {
+    connections.disconnect(&id);
+}
+
+#[tauri::command]
+async fn client_databases(
+    connections: State<'_, client::Connections>,
+    id: String,
+) -> Result<Vec<client::Database>, String> {
+    connections.databases(&id).await
+}
+
+#[tauri::command]
+async fn client_collections(
+    connections: State<'_, client::Connections>,
+    id: String,
+    database: String,
+) -> Result<Vec<client::Collection>, String> {
+    connections.collections(&id, &database).await
+}
+
+#[tauri::command]
+async fn client_find(
+    connections: State<'_, client::Connections>,
+    id: String,
+    request: client::FindRequest,
+) -> Result<client::Page, String> {
+    connections.find(&id, &request).await
+}
+
+#[tauri::command]
+async fn client_aggregate(
+    connections: State<'_, client::Connections>,
+    id: String,
+    database: String,
+    collection: String,
+    pipeline: String,
+    limit: u64,
+) -> Result<client::Page, String> {
+    connections
+        .aggregate(&id, &database, &collection, &pipeline, limit)
+        .await
+}
+
+#[tauri::command]
+async fn client_columns(
+    connections: State<'_, client::Connections>,
+    id: String,
+    database: String,
+    collection: String,
+) -> Result<Vec<client::Field>, String> {
+    connections.columns(&id, &database, &collection).await
+}
+
+#[tauri::command]
+async fn client_indexes(
+    connections: State<'_, client::Connections>,
+    id: String,
+    database: String,
+    collection: String,
+) -> Result<Vec<client::Index>, String> {
+    connections.indexes(&id, &database, &collection).await
+}
+
+#[tauri::command]
+async fn client_sql(
+    connections: State<'_, client::Connections>,
+    id: String,
+    database: String,
+    sql: String,
+) -> Result<client::QueryResult, String> {
+    connections.sql(&id, &database, &sql).await
+}
+
 /// A `.prisma` path passed on the command line (e.g. "Open with Prismagram").
 #[tauri::command]
 fn launch_file() -> Option<String> {
@@ -69,6 +157,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(client::Connections::default())
         .invoke_handler(tauri::generate_handler![
             parse_schema,
             read_text_file,
@@ -76,7 +165,16 @@ pub fn run() {
             write_binary_file,
             file_modified,
             launch_file,
-            pull_database
+            pull_database,
+            client_connect,
+            client_disconnect,
+            client_databases,
+            client_collections,
+            client_find,
+            client_aggregate,
+            client_columns,
+            client_indexes,
+            client_sql
         ])
         .run(tauri::generate_context!())
         .expect("error while running Prismagram");

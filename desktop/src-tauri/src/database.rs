@@ -1,5 +1,6 @@
 //! Pulls the schema of a live PostgreSQL database, such as a Supabase project, and turns it
 //! into Prisma schema text. Only the catalog is read: no table data, and nothing is written.
+//! The connection helpers here are shared with the data browser in `client.rs`.
 
 use prismagram_core::introspect::{self, Catalog};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
@@ -53,12 +54,12 @@ enum Tls {
     },
 }
 
-struct Target {
+pub(crate) struct Target {
     config: Config,
     tls: Tls,
     host: String,
     supabase: bool,
-    source: String,
+    pub(crate) source: String,
 }
 
 pub async fn pull(url: &str, password: &str, schemas: &[String]) -> Result<Pulled, String> {
@@ -96,7 +97,7 @@ pub async fn pull(url: &str, password: &str, schemas: &[String]) -> Result<Pulle
     })
 }
 
-fn parse_target(input: &str, password: &str) -> Result<Target, String> {
+pub(crate) fn parse_target(input: &str, password: &str) -> Result<Target, String> {
     let mut url = unquote(input.trim()).to_string();
     // A whole `DATABASE_URL="postgres://..."` line copied from a .env file.
     if let Some((key, value)) = url.split_once('=') {
@@ -192,7 +193,7 @@ fn parse_target(input: &str, password: &str) -> Result<Target, String> {
     })
 }
 
-async fn connect(target: &Target) -> Result<Client, String> {
+pub(crate) async fn connect(target: &Target) -> Result<Client, String> {
     let explain = |e: tokio_postgres::Error| explain(&e, target);
     let client = match &target.tls {
         Tls::Off => {
@@ -360,7 +361,7 @@ fn explain(e: &tokio_postgres::Error, target: &Target) -> String {
 }
 
 /// The error with its causes, e.g. "error connecting to server: Connection refused (os error 111)".
-fn db_message(e: &tokio_postgres::Error) -> String {
+pub(crate) fn db_message(e: &tokio_postgres::Error) -> String {
     if let Some(db) = e.as_db_error() {
         return db.message().to_string();
     }
@@ -423,6 +424,26 @@ mod tests {
         assert_eq!(t.source, "aws-0-eu-west-1.pooler.supabase.com/postgres");
         assert_eq!(t.config.get_ssl_mode(), SslMode::Require);
         assert!(matches!(t.tls, Tls::Unverified));
+    }
+
+    #[test]
+    fn reads_neon_strings() {
+        let t = parse_target(
+            "postgresql://neondb_owner:npg_s3cret@ep-cool-darkness-a1b2c3d4-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require",
+            "",
+        )
+        .unwrap();
+        assert_eq!(t.config.get_user(), Some("neondb_owner"));
+        assert_eq!(
+            t.config.get_channel_binding(),
+            tokio_postgres::config::ChannelBinding::Require
+        );
+        assert_eq!(t.config.get_ssl_mode(), SslMode::Require);
+        assert!(matches!(t.tls, Tls::Unverified));
+        assert_eq!(
+            t.source,
+            "ep-cool-darkness-a1b2c3d4-pooler.us-east-2.aws.neon.tech/neondb"
+        );
     }
 
     #[test]
