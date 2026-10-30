@@ -100,7 +100,7 @@ function updateStatus() {
   const el = $("statusProblems");
   el.className = "status-item diagram-only " + (errors ? "bad" : warnings ? "warn" : "ok");
   el.textContent = errors || warnings
-    ? [errors && `${errors} error${errors > 1 ? "s" : ""}`, warnings && `${warnings} warning${warnings > 1 ? "s" : ""}`].filter(Boolean).join(" · ")
+    ? [errors && `${errors} error${errors > 1 ? "s" : ""}`, warnings && `${warnings} warning${warnings > 1 ? "s" : ""}`].filter(Boolean).join(", ")
     : "No problems";
 
   const models = s.models.filter((m) => m.kind !== "type").length;
@@ -109,7 +109,7 @@ function updateStatus() {
   if (types) parts.push(`${types} type${types === 1 ? "" : "s"}`);
   parts.push(`${s.enums.length} enum${s.enums.length === 1 ? "" : "s"}`);
   parts.push(`${s.relations.length} relation${s.relations.length === 1 ? "" : "s"}`);
-  $("statusCounts").textContent = parts.join(" · ");
+  $("statusCounts").textContent = parts.join(", ");
 
   const badge = $("providerBadge");
   badge.hidden = !s.provider;

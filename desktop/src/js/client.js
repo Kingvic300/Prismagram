@@ -79,7 +79,7 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     return withoutPassword(line.replace(/^["']|["']$/g, ""));
   }
 
-  async function connect(url, password) {
+  async function connect(url, password, name) {
     const key = savedKey(url);
     connecting.add(key);
     renderTree();
@@ -87,8 +87,10 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
       const result = await invoke("client_connect", { url, password });
       const old = live.get(key);
       if (old) await invoke("client_disconnect", { id: old.id }).catch(() => {});
+      name = name?.trim() || result.source;
       const conn = {
         ...result,
+        name,
         key,
         url,
         password,
@@ -96,12 +98,12 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
         expanded: new Set(result.defaultDatabase ? [result.defaultDatabase] : []),
       };
       live.set(key, conn);
-      saved = [{ url: key, name: result.source, kind: result.kind }, ...saved.filter((s) => s.url !== key)].slice(0, MAX_SAVED);
+      saved = [{ url: key, name, kind: result.kind }, ...saved.filter((s) => s.url !== key)].slice(0, MAX_SAVED);
       storeSaved();
       // Tabs left from an earlier session of this connection use the new id.
       tabs.filter((t) => t.conn === key).forEach((t) => fetchActive(t));
       if (result.kind === "mongodb" && result.defaultDatabase) await loadCollections(conn, result.defaultDatabase);
-      toast(`Connected to ${result.source}`);
+      toast(`Connected to ${name}`);
       return conn;
     } finally {
       connecting.delete(key);
@@ -153,24 +155,26 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
   }
 
   // Connection dialog.
+  const nameInput = $("connName");
   const urlInput = $("connUrl");
   const passwordInput = $("connPassword");
   const dialogError = $("connError");
   const submit = $("connSubmit");
   let attempt = 0;
 
-  function openDialog(url = "", error = "") {
+  function openDialog(url = "", error = "", name = "") {
+    nameInput.value = name;
     urlInput.value = url;
     passwordInput.value = "";
     dialogError.textContent = error;
     dialogError.hidden = !error;
     setBusy(false);
     dialog.showModal();
-    (url ? passwordInput : urlInput).focus();
+    (!name ? nameInput : url ? passwordInput : urlInput).focus();
   }
 
   function setBusy(busy) {
-    [urlInput, passwordInput, submit].forEach((el) => (el.disabled = busy));
+    [nameInput, urlInput, passwordInput, submit].forEach((el) => (el.disabled = busy));
     submit.textContent = busy ? "Connecting…" : "Connect";
   }
 
@@ -178,9 +182,17 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     e.preventDefault();
     const current = ++attempt;
     dialogError.hidden = true;
+    const missing = !nameInput.value.trim() ? [nameInput, "Name this connection so you can find it later."] : !urlInput.value.trim() ? [urlInput, "Paste a connection string."] : null;
+    nameInput.toggleAttribute("aria-invalid", missing?.[0] === nameInput);
+    urlInput.toggleAttribute("aria-invalid", missing?.[0] === urlInput);
+    if (missing) {
+      dialogError.textContent = missing[1];
+      dialogError.hidden = false;
+      return missing[0].focus();
+    }
     setBusy(true);
     try {
-      await connect(urlInput.value, passwordInput.value);
+      await connect(urlInput.value, passwordInput.value, nameInput.value);
       if (current !== attempt) return;
       dialog.close();
     } catch (err) {
@@ -198,11 +210,11 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
 
   /** Reconnects a remembered connection, asking for the password when the string needs one. */
   async function reconnect(entry) {
-    if (PLACEHOLDER.test(entry.url)) return openDialog(entry.url);
+    if (PLACEHOLDER.test(entry.url)) return openDialog(entry.url, "", entry.name);
     try {
-      await connect(entry.url, "");
+      await connect(entry.url, "", entry.name);
     } catch (err) {
-      openDialog(entry.url, String(err));
+      openDialog(entry.url, String(err), entry.name);
     }
   }
 
@@ -249,7 +261,7 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
       ${conn.kind === "postgres" ? `<span class="row-actions">${iconButton("diagram-db", ICONS.diagram, `Diagram the ${db.name} schema`)}</span>` : ""}
     </div>`;
     if (!open) return html;
-    if (db.loading) return html + `<div class="tree-note">Loading…</div>`;
+    if (db.loading) return html + skeletonHtml("tree", 3);
     if (db.error) return html + `<div class="tree-note error">${esc(db.error)}</div>`;
     if (!items.length) return html + `<div class="tree-note">${q ? "No matches" : "Empty"}</div>`;
     return (
@@ -436,7 +448,7 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     view.innerHTML = `
       <div class="db-head">
         <div class="crumbs">
-          <span>${esc(conn?.source || tab.conn)}</span><span class="sep">›</span>
+          <span>${esc(conn?.name || tab.conn)}</span><span class="sep">›</span>
           <span>${esc(tab.db)}</span><span class="sep">›</span>
           <b>${esc(tab.coll || (pg ? "SQL query" : "Aggregation"))}</b>
         </div>
@@ -671,7 +683,7 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     if (prev) prev.disabled = tab.skip === 0 || tab.loading;
     if (next) next.disabled = tab.loading || !hasNext(tab);
     if (tab.error) return (box.innerHTML = errorHtml(tab.error));
-    if (!page) return (box.innerHTML = `<div class="db-message">Loading…</div>`);
+    if (!page) return (box.innerHTML = skeletonHtml(tab.layout === "table" ? "table" : "cards"));
     box.classList.toggle("loading", tab.loading);
     if (!rows.length) return (box.innerHTML = `<div class="db-message">${tab.filter ? "No rows match this filter." : "This is empty."}</div>`);
     const types = columnTypes(page);
@@ -842,13 +854,13 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
           .join("")}</div>`;
       return;
     }
-    box.innerHTML = `<div class="db-message">${tab.loading ? "Analyzing…" : ""}</div>`;
+    box.innerHTML = tab.loading ? skeletonHtml(isPostgres(tab) ? "table" : "schema") : "";
   }
 
   function renderIndexes(tab) {
     const box = results();
     if (tab.error) return (box.innerHTML = errorHtml(tab.error));
-    if (!tab.indexes) return (box.innerHTML = `<div class="db-message">Loading…</div>`);
+    if (!tab.indexes) return (box.innerHTML = skeletonHtml("table", 3));
     if (!tab.indexes.length) return (box.innerHTML = `<div class="db-message">No indexes.</div>`);
     box.innerHTML = `<table class="grid info"><thead><tr><th>Name</th><th>Definition</th><th>Properties</th><th>Size</th></tr></thead><tbody>${tab.indexes
       .map(
@@ -867,7 +879,7 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     const run = view.querySelector('[data-act="run"]');
     if (run) run.disabled = tab.loading;
     if (tab.error) return (box.innerHTML = errorHtml(tab.error));
-    if (tab.loading && !tab.result) return (box.innerHTML = `<div class="db-message">Running…</div>`);
+    if (tab.loading && !tab.result) return (box.innerHTML = skeletonHtml("table"));
     const r = tab.result;
     if (!r) return (box.innerHTML = `<div class="db-message">Press Run or Ctrl+Enter.</div>`);
     box.classList.toggle("loading", tab.loading);
@@ -898,7 +910,7 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     }
     const rows = r.rows || [];
     box.innerHTML =
-      `<div class="result-head">${rows.length} document${rows.length === 1 ? "" : "s"} · ${r.ms} ms</div>` +
+      `<div class="result-head">${rows.length} document${rows.length === 1 ? "" : "s"} in ${r.ms} ms</div>` +
       (rows.length ? rows.map((row, i) => docCard(row, i, new Map(), tab.resultFields, "result")).join("") : "");
   }
 
@@ -1074,8 +1086,8 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
   function updateStatus() {
     const tab = activeTab();
     const parts = [live.size ? `${live.size} connection${live.size === 1 ? "" : "s"} open` : "Not connected"];
-    if (tab?.page && tab.view === "documents") parts.push(`${tab.db}.${tab.coll} · ${tab.page.ms} ms`);
-    onStatus(parts.join(" · "));
+    if (tab?.page && tab.view === "documents") parts.push(`${tab.db}.${tab.coll} in ${tab.page.ms} ms`);
+    onStatus(parts.join(", "));
   }
 
   $("dbAddConnection").addEventListener("click", () => openDialog());
@@ -1103,6 +1115,32 @@ function iconButton(act, icon, title) {
 
 function errorHtml(message) {
   return `<p class="dialog-error db-error">${esc(message)}</p>`;
+}
+
+// Placeholder shapes shown while a request runs, laid out like the content they stand in for.
+// Widths cycle through a fixed list so re-renders do not make the bars jump.
+const SKEL_WIDTHS = [62, 38, 80, 54, 71, 45, 88, 33];
+
+function skeletonHtml(shape, count = 6) {
+  const bar = (i, extra = "") => `<span class="skel${extra}" style="width:${SKEL_WIDTHS[i % SKEL_WIDTHS.length]}%"></span>`;
+  const n = Array.from({ length: count }, (_, i) => i);
+  const busy = `aria-busy="true" aria-label="Loading"`;
+  if (shape === "tree") return `<div class="tree-skel" ${busy}>${n.map((i) => bar(i + 2)).join("")}</div>`;
+  if (shape === "table") {
+    const cols = [0, 1, 2, 3];
+    return `<div class="grid-wrap" ${busy}><table class="grid skel-grid"><thead><tr>${cols.map((c) => `<th>${bar(c + 5)}</th>`).join("")}</tr></thead><tbody>${n
+      .map((r) => `<tr>${cols.map((c) => `<td>${bar(r + c * 3)}</td>`).join("")}</tr>`)
+      .join("")}</tbody></table></div>`;
+  }
+  if (shape === "schema") {
+    return `<div class="schema-list" ${busy}>${n
+      .map((i) => `<div class="schema-field" style="--depth:0">${bar(i)}${bar(i + 3, " tall")}${bar(4)}</div>`)
+      .join("")}</div>`;
+  }
+  return `<div ${busy}>${n
+    .slice(0, 4)
+    .map((c) => `<div class="doc-card skel-card">${[0, 1, 2, 3].map((l) => `<div class="skel-field"><span class="skel key"></span>${bar(c * 2 + l)}</div>`).join("")}</div>`)
+    .join("")}</div>`;
 }
 
 function pct(share) {

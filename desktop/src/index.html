@@ -212,8 +212,8 @@
       <span id="statusData" class="status-item data-only"></span>
       <div class="spacer"></div>
       <span id="statusWatch" class="status-item diagram-only" hidden>Watching file</span>
-      <span class="status-item muted diagram-only">Ctrl+O open · Ctrl+S save · Ctrl+E export</span>
-      <span class="status-item muted data-only">Ctrl+Enter run · Ctrl+1 diagram · Ctrl+2 data</span>
+      <span class="status-item muted keys diagram-only"><span><kbd>Ctrl O</kbd>Open</span><span><kbd>Ctrl S</kbd>Save</span><span><kbd>Ctrl E</kbd>Export</span></span>
+      <span class="status-item muted keys data-only"><span><kbd>Ctrl Enter</kbd>Run</span><span><kbd>Ctrl 1</kbd>Diagram</span><span><kbd>Ctrl 2</kbd>Data</span></span>
     </footer>
 
     <div class="update-banner" id="updateBanner" role="status" hidden>
@@ -255,12 +255,15 @@
         <h2>New connection</h2>
         <p class="hint">PostgreSQL, Supabase and MongoDB (including Atlas). The connection stays open until you disconnect it.</p>
 
+        <label class="field-label" for="connName">Name</label>
+        <input id="connName" class="input" maxlength="60" autocomplete="off" aria-required="true" placeholder="Shop production" />
+
         <label class="field-label" for="connUrl">Connection string</label>
         <input id="connUrl" class="input mono" spellcheck="false" autocomplete="off" autocapitalize="off"
           placeholder="mongodb+srv://user:<db_password>@cluster0.abcd.mongodb.net/" />
         <p class="hint">
-          <code>postgresql://user:pass@host:5432/db</code> · <code>mongodb://localhost:27017/app</code> ·
-          a whole <code>DATABASE_URL=…</code> line from <code>.env</code> works too.
+          For example <code>postgresql://user:pass@host:5432/db</code> or <code>mongodb://localhost:27017/app</code>.
+          A whole <code>DATABASE_URL=…</code> line from <code>.env</code> works too.
         </p>
 
         <label class="field-label" for="connPassword">Password</label>
