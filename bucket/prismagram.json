@@ -1,12 +1,12 @@
 {
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Prisma schema diagrams and a database client",
     "homepage": "https://kingvic300.github.io/Prismagram/",
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/Kingvic300/Prismagram/releases/download/v0.3.0/Prismagram_0.3.0_x64-setup.exe#/dl.7z",
-            "hash": "d20ba949f7acc72b409553b37a8fa6dbe7bfd9fdd166955d23ce2a5d5c705225"
+            "url": "https://github.com/Kingvic300/Prismagram/releases/download/v0.4.0/Prismagram_0.4.0_x64-setup.exe#/dl.7z",
+            "hash": "943328e22bda7ae21c366bcb438bef7e8707dab76270ba12c6d0f30910c88712"
         }
     },
     "pre_install": "Remove-Item \"$dir\\$PLUGINSDIR\", \"$dir\\uninstall.exe\" -Recurse -Force -ErrorAction SilentlyContinue",
