@@ -28,8 +28,7 @@ const STRING_PREVIEW = 2000;
 const ITEMS_SHOWN = 200;
 const PAGE_SIZES = [20, 50, 100];
 const SAMPLE_SIZE = 200;
-/** How often the open tab and the sidebar counts are read again. */
-const LIVE_MS = 1000;
+
 const PLACEHOLDER = /\[YOUR-PASSWORD\]|<db_password>|<password>/;
 
 const ICONS = {
@@ -55,7 +54,7 @@ const ICONS = {
   plus: '<svg viewBox="0 0 24 24" class="ico"><path d="M12 5v14 M5 12h14" /></svg>',
 };
 
-export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onStatus }) {
+export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onStatus, prefs = {}, onLiveChange, onConnectionsChange }) {
   const $ = (id) => document.getElementById(id);
   const tree = $("dbTree");
   const tabBar = $("dbTabs");
@@ -326,6 +325,7 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
       .join("");
     if (!saved.length) tree.innerHTML = `<p class="tree-empty">No connections yet.</p>`;
     renderRecent();
+    onConnectionsChange?.();
   }
 
   function databaseHtml(conn, db, q) {
@@ -444,8 +444,8 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
         project: "",
         showOptions: false,
         skip: 0,
-        limit: PAGE_SIZES[0],
-        layout: "list",
+        limit: PAGE_SIZES.includes(prefs.pageSize) ? prefs.pageSize : PAGE_SIZES[0],
+        layout: prefs.layout || "list",
         page: null,
         error: null,
         loading: false,
@@ -605,7 +605,7 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
             ${PAGE_SIZES.map((n) => `<option value="${n}"${n === tab.limit ? " selected" : ""}>${n}</option>`).join("")}
           </select>
           <span class="range" data-range></span>
-          <button class="btn ghost small live-toggle${autoRefresh ? " on" : ""}" data-act="live" title="Read the data again every second">Live</button>
+          <button class="btn ghost small live-toggle${autoRefresh ? " on" : ""}" data-act="live" title="Read the data again every ${liveMs / 1000} s">Live</button>
           ${iconButton("refresh-docs", ICONS.refresh, "Refresh")}
           ${iconButton("prev", ICONS.prev, "Previous page")}
           ${iconButton("next", ICONS.next, "Next page")}
@@ -1152,6 +1152,7 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
       case "live":
         autoRefresh = !autoRefresh;
         view.querySelectorAll(".live-toggle").forEach((b) => b.classList.toggle("on", autoRefresh));
+        onLiveChange?.(autoRefresh);
         return;
       case "wrap":
         if (!window.getSelection()?.toString()) el.classList.toggle("wrap");
@@ -1512,25 +1513,28 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
   }
 
   // ------------------------------------------------------------ live refresh
-  // Every LIVE_MS the open tab's rows (or indexes) and the sidebar's counts are read again and
+  // Every liveMs (Settings → Data) the open tab's rows (or indexes) and the sidebar's counts are read again and
   // redrawn only when they changed, keeping the scroll position and the opened fields. A poll
   // is skipped while the last one is still running, while the window is hidden or in Diagram
   // mode, and while a dialog is open, so an edit never targets a row that just moved. The SQL
   // and Aggregations tabs are never re-run: their statements can change data.
 
-  let autoRefresh = true;
+  let autoRefresh = prefs.live ?? true;
+  let liveMs = prefs.interval || 1000;
   let polling = false;
+  let lastPoll = 0;
 
   setInterval(async () => {
     if (!autoRefresh || polling || document.hidden || !document.body.classList.contains("mode-data")) return;
-    if (document.querySelector("dialog[open]")) return;
+    if (document.querySelector("dialog[open]") || Date.now() - lastPoll < liveMs) return;
+    lastPoll = Date.now();
     polling = true;
     try {
       await Promise.all([pollTab(activeTab()), pollTree()]);
     } finally {
       polling = false;
     }
-  }, LIVE_MS);
+  }, 250);
 
   async function pollTab(tab) {
     const conn = tab && connOf(tab);
@@ -1645,6 +1649,31 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
 
   return {
     openDialog: () => openDialog(),
+    /** Live refresh, its interval, and the page size and layout of tabs opened from now on. */
+    setPrefs(next) {
+      prefs = next;
+      autoRefresh = next.live;
+      liveMs = next.interval;
+      view.querySelectorAll(".live-toggle").forEach((b) => {
+        b.classList.toggle("on", autoRefresh);
+        b.title = `Read the data again every ${liveMs / 1000} s`;
+      });
+    },
+    /** Saved connections for the settings page, without secrets. */
+    connections: () => saved.map((s) => ({ url: s.url, name: s.name, kind: s.kind, connected: live.has(s.url) })),
+    editConnection(url) {
+      const entry = saved.find((s) => s.url === url);
+      if (entry) editConnection(entry);
+    },
+    async forgetConnection(url) {
+      const entry = saved.find((s) => s.url === url);
+      if (!entry) return;
+      if (live.has(url)) await disconnect(url);
+      forgetSecret(entry);
+      saved = saved.filter((s) => s !== entry);
+      storeSaved();
+      renderTree();
+    },
     /** Closes every connection and forgets the saved ones. The caller removes the stored copy. */
     async clearAll() {
       await Promise.all([...live.keys()].map(disconnect));

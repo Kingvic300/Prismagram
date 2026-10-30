@@ -67,7 +67,7 @@ prismagram path/to/schema.prisma # open a schema
 
 Once installed, Prismagram keeps itself up to date: it checks GitHub Releases shortly after
 launch and every few hours, downloads new versions in the background, and shows a
-**Restart now** banner. Turn this off in Settings → App. The AppImage updates in place
+**Restart now** banner. Turn this off in Settings (the gear, or Ctrl+,) → Updates. The AppImage updates in place
 without a password; the `.deb` and `.rpm` ask for your password to install the update.
 
 **macOS and Windows** builds are attached to each release too, and this repository is a
@@ -160,7 +160,7 @@ statements as typed, so `update` and `delete` there change data too. Views are r
 **Saved connections** keep their connection string and password in your system keychain
 (Keychain, Credential Manager, or GNOME Keyring / KWallet), so reconnecting is one click.
 The app's own storage keeps only the name and the connection string without the password.
-**Clear all data** (the trash icon next to Connections) removes all of it.
+**Clear all data** (Settings → Privacy, or the trash icon next to Connections) removes all of it. Settings → Data sets the live refresh interval, rows per page and the first view of a table.
 
 ## How the diagram is drawn
 

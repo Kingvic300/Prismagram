@@ -27,7 +27,14 @@ const DEFAULT_OPTIONS = {
   editorWidth: 440,
   editorHidden: false,
   mode: "diagram",
+  liveRefresh: true,
+  liveInterval: "1000",
+  pageSize: "20",
+  docLayout: "list",
 };
+
+/** Options that change Data mode rather than the diagram. */
+const DATA_OPTIONS = new Set(["liveRefresh", "liveInterval", "pageSize", "docLayout"]);
 
 const state = {
   path: null,
@@ -471,11 +478,28 @@ async function openDatabase() {
 
 // ---------------------------------------------------------------- data mode
 
+function dataPrefs() {
+  return {
+    live: state.opts.liveRefresh,
+    interval: Number(state.opts.liveInterval) || 1000,
+    pageSize: Number(state.opts.pageSize) || 20,
+    layout: state.opts.docLayout,
+  };
+}
+
 const dataClient = createDataClient({
   dialog: $("connDialog"),
   invoke,
   tauri,
   toast,
+  prefs: dataPrefs(),
+  // The Live button in a tab is the same setting as the one on the settings page.
+  onLiveChange: (on) => {
+    state.opts.liveRefresh = on;
+    saveOptions();
+    renderSettings();
+  },
+  onConnectionsChange: () => renderConnections(),
   onStatus: (text) => ($("statusData").textContent = text),
   // "Diagram" on a PostgreSQL schema: import it like the Supabase dialog does, then show it.
   onDiagram: async ({ url, password, schemas }) => {
@@ -502,6 +526,7 @@ function setMode(mode) {
     .forEach((b) => b.classList.toggle("active", b.dataset.mode === state.opts.mode));
   hideTooltip();
   setSettings(false);
+  setPage(false);
   saveOptions();
   // The canvas had no size while hidden.
   if (!data && state.needsFit) redraw();
@@ -683,12 +708,13 @@ function setSettings(open) {
 $("btnSettings").addEventListener("click", () => setSettings($("settings").hidden));
 
 function renderSettings() {
-  $("themeSwatches").innerHTML = Object.entries(THEMES)
+  const swatches = Object.entries(THEMES)
     .map(
       ([key, t]) => `<div><button class="swatch${key === state.opts.theme ? " active" : ""}" data-theme="${key}" title="${t.title}" style="background:${t.canvas}">
         <i style="background:${t.fill};border-color:${t.stroke};--h:${t.header}"></i></button><span class="swatch-name">${t.title}</span></div>`,
     )
     .join("");
+  document.querySelectorAll(".theme-swatches").forEach((el) => (el.innerHTML = swatches));
   document.querySelectorAll(".swatch i").forEach((i) => {
     i.style.backgroundImage = `linear-gradient(${i.style.getPropertyValue("--h")} 0 8px, transparent 8px)`;
   });
@@ -698,24 +724,121 @@ function renderSettings() {
   document.querySelectorAll("input[data-opt]").forEach((input) => (input.checked = Boolean(state.opts[input.dataset.opt])));
 }
 
-$("settings").addEventListener("click", (e) => {
-  const swatch = e.target.closest("[data-theme]");
-  const seg = e.target.closest(".segmented button");
-  if (swatch) state.opts.theme = swatch.dataset.theme;
-  else if (seg) state.opts[seg.parentElement.dataset.opt] = seg.dataset.value;
-  else return;
-  saveOptions();
-  renderSettings();
-  redraw();
-});
-$("settings").addEventListener("change", (e) => {
-  const key = e.target.dataset.opt;
-  if (!key) return;
-  state.opts[key] = e.target.checked;
-  saveOptions();
+// The canvas panel and the settings page hold the same controls; both edit state.opts.
+function applyOption(key) {
   if (key === "autoUpdate") updater.setAuto(state.opts.autoUpdate);
+  else if (DATA_OPTIONS.has(key)) dataClient.setPrefs(dataPrefs());
   else redraw();
+}
+
+for (const panel of [$("settings"), $("settingsPage")]) {
+  panel.addEventListener("click", (e) => {
+    const swatch = e.target.closest("[data-theme]");
+    const seg = e.target.closest(".segmented[data-opt] button");
+    let key;
+    if (swatch) {
+      key = "theme";
+      state.opts.theme = swatch.dataset.theme;
+    } else if (seg) {
+      key = seg.parentElement.dataset.opt;
+      state.opts[key] = seg.dataset.value;
+    } else return;
+    saveOptions();
+    renderSettings();
+    applyOption(key);
+  });
+  panel.addEventListener("change", (e) => {
+    const key = e.target.dataset.opt;
+    if (!key) return;
+    state.opts[key] = e.target.checked;
+    saveOptions();
+    renderSettings();
+    applyOption(key);
+  });
+}
+
+// Settings page: replaces the workspace until closed.
+function setPage(open, section) {
+  const page = $("settingsPage");
+  if (open === !page.hidden && !section) return;
+  page.hidden = !open;
+  document.body.classList.toggle("settings-open", open);
+  $("btnAppSettings").classList.toggle("active", open);
+  if (open) {
+    setSettings(false);
+    renderSettings();
+    renderConnections();
+    if (section) showSection(section);
+    return;
+  }
+  // The canvas had no size while the page covered it.
+  if (state.opts.mode === "diagram") {
+    if (state.needsFit) redraw();
+    else if (state.diagram) applyView();
+  }
+}
+
+function showSection(name) {
+  const target = $("settingsBody").querySelector(`[data-section="${name}"]`);
+  target?.scrollIntoView({ block: "start" });
+  markSection(name);
+}
+
+function markSection(name) {
+  $("settingsNav")
+    .querySelectorAll("[data-section]")
+    .forEach((b) => b.classList.toggle("active", b.dataset.section === name));
+}
+
+$("btnAppSettings").addEventListener("click", () => setPage($("settingsPage").hidden));
+$("btnAllSettings").addEventListener("click", () => setPage(true, "diagram"));
+$("settingsNav").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-section]");
+  if (b) showSection(b.dataset.section);
 });
+// Highlight the section being read.
+$("settingsBody").addEventListener("scroll", () => {
+  const body = $("settingsBody");
+  const top = body.getBoundingClientRect().top + 80;
+  let current = null;
+  for (const s of body.querySelectorAll(".set-section")) if (s.getBoundingClientRect().top <= top) current = s.dataset.section;
+  if (body.scrollTop + body.clientHeight >= body.scrollHeight - 4) current = "about";
+  markSection(current || "diagram");
+});
+
+function renderConnections() {
+  const list = $("settingsConnections");
+  if (!list || $("settingsPage").hidden) return;
+  const items = dataClient.connections();
+  list.innerHTML = items.length
+    ? items
+        .map(
+          (c) => `<div class="conn-item">
+            <span class="dot${c.connected ? " on" : ""}" title="${c.connected ? "Connected" : "Not connected"}"></span>
+            <div class="conn-text"><b>${escapeHtml(c.name)}</b><small>${c.kind === "mongodb" ? "MongoDB" : "PostgreSQL"} · <code>${escapeHtml(c.url)}</code></small></div>
+            <button class="btn small" data-conn-edit="${escapeHtml(c.url)}">Edit</button>
+            <button class="btn small danger" data-conn-forget="${escapeHtml(c.url)}">Forget</button>
+          </div>`,
+        )
+        .join("")
+    : `<p class="set-empty">No saved connections yet.</p>`;
+}
+
+$("settingsConnections").addEventListener("click", async (e) => {
+  const edit = e.target.closest("[data-conn-edit]");
+  const forget = e.target.closest("[data-conn-forget]");
+  if (edit) return dataClient.editConnection(edit.dataset.connEdit);
+  if (!forget) return;
+  const name = dataClient.connections().find((c) => c.url === forget.dataset.connForget)?.name || "this connection";
+  const ok = await tauri.dialog.ask(`Forget ${name}? Its connection string and password are removed from the system keychain.`, {
+    title: "Forget connection",
+    kind: "warning",
+    okLabel: "Forget",
+    cancelLabel: "Cancel",
+  });
+  if (ok) await dataClient.forgetConnection(forget.dataset.connForget);
+});
+$("settingsNewConnection").addEventListener("click", () => dataClient.openDialog());
 
 // Updates.
 const updater = createUpdater({
@@ -749,6 +872,7 @@ async function clearAllData() {
   state.opts = { ...DEFAULT_OPTIONS };
   renderSettings();
   updater.setAuto(state.opts.autoUpdate);
+  dataClient.setPrefs(dataPrefs());
   redraw();
   toast("All saved data cleared");
 }
@@ -775,6 +899,14 @@ document.addEventListener("keydown", (e) => {
   if (mod && (e.key === "1" || e.key === "2")) {
     e.preventDefault();
     return setMode(e.key === "1" ? "diagram" : "data");
+  }
+  if (mod && e.key === ",") {
+    e.preventDefault();
+    return setPage($("settingsPage").hidden);
+  }
+  if (!$("settingsPage").hidden) {
+    if (e.key === "Escape" && !document.querySelector("dialog[open]")) setPage(false);
+    return;
   }
   if (state.opts.mode === "data") {
     if (dataClient.handleKey(e)) e.preventDefault();

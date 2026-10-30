@@ -73,6 +73,7 @@
           <button data-export="copy">Copy SVG markup</button>
         </div>
       </div>
+      <button class="btn ghost settings-btn" id="btnAppSettings" title="Settings (Ctrl+,)"><svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg></button>
     </header>
 
     <main class="workspace" id="workspace">
@@ -131,7 +132,7 @@
         <aside class="settings" id="settings" hidden>
           <h3>Diagram</h3>
           <label class="field-label">Theme</label>
-          <div class="swatches" id="themeSwatches"></div>
+          <div class="swatches theme-swatches"></div>
 
           <label class="field-label">Links</label>
           <div class="segmented" data-opt="linkMode" title="Tree keeps one line per model; click a model to see all its links">
@@ -164,17 +165,7 @@
           <label class="toggle"><input type="checkbox" data-opt="showLabels" /> Edge labels</label>
           <label class="toggle"><input type="checkbox" data-opt="rounded" /> Rounded corners</label>
 
-          <h3 class="settings-section">App</h3>
-          <label class="toggle"><input type="checkbox" data-opt="autoUpdate" /> Install updates automatically</label>
-          <div class="update-row">
-            <button class="btn" id="btnCheckUpdates">Check for updates</button>
-            <span id="appVersion" class="version"></span>
-          </div>
-          <p class="update-status" id="updateStatus" hidden></p>
-          <div class="update-row">
-            <button class="btn danger" id="btnClearData">Clear all data</button>
-          </div>
-          <p class="update-status">Closes open connections and removes saved connections, their passwords and your settings. Your files are not touched.</p>
+          <button class="btn ghost small all-settings" id="btnAllSettings">All settings…</button>
         </aside>
 
         <div class="tooltip" id="tooltip" hidden></div>
@@ -210,6 +201,145 @@
           <div class="db-recent" id="dbRecent"></div>
         </div>
       </section>
+    </main>
+
+    <main class="settingspace" id="settingsPage" hidden>
+      <nav class="settings-nav" id="settingsNav">
+        <h2>Settings</h2>
+        <button data-section="diagram" class="active">Diagram</button>
+        <button data-section="data">Data</button>
+        <button data-section="connections">Connections</button>
+        <button data-section="updates">Updates</button>
+        <button data-section="privacy">Privacy</button>
+        <button data-section="about">About</button>
+      </nav>
+      <div class="settings-body" id="settingsBody">
+        <section class="set-section" data-section="diagram">
+          <h3>Diagram</h3>
+          <p class="set-hint">How schemas are drawn. Changes apply right away.</p>
+          <div class="set-row">
+            <div><b>Theme</b><small>Colors of the canvas and the class boxes.</small></div>
+          </div>
+          <div class="swatches theme-swatches set-swatches"></div>
+          <div class="set-row">
+            <div><b>Links</b><small>Tree keeps one line per model; click a model to see all its links.</small></div>
+            <div class="segmented" data-opt="linkMode">
+              <button data-value="auto">Auto</button>
+              <button data-value="tree">Tree</button>
+              <button data-value="hubs">Hubs</button>
+              <button data-value="all">All</button>
+            </div>
+          </div>
+          <div class="set-row">
+            <div><b>Type notation</b><small>How optional fields are written.</small></div>
+            <div class="segmented" data-opt="notation">
+              <button data-value="prisma">String?</button>
+              <button data-value="uml">String [0..1]</button>
+            </div>
+          </div>
+          <div class="set-row">
+            <div><b>Relation marker</b><small>The end of each relation line.</small></div>
+            <div class="segmented" data-opt="marker">
+              <button data-value="triangle">△</button>
+              <button data-value="diamond">◇</button>
+              <button data-value="arrow">→</button>
+              <button data-value="none">—</button>
+            </div>
+          </div>
+          <div class="set-row"><div><b>Relation fields</b></div><label class="toggle"><input type="checkbox" data-opt="showRelations" aria-label="Relation fields" /></label></div>
+          <div class="set-row"><div><b>Enums</b></div><label class="toggle"><input type="checkbox" data-opt="showEnums" aria-label="Enums" /></label></div>
+          <div class="set-row"><div><b>Default values</b></div><label class="toggle"><input type="checkbox" data-opt="showDefaults" aria-label="Default values" /></label></div>
+          <div class="set-row"><div><b>{id} / {unique} tags</b></div><label class="toggle"><input type="checkbox" data-opt="showProps" aria-label="id and unique tags" /></label></div>
+          <div class="set-row"><div><b>@@ constraints</b></div><label class="toggle"><input type="checkbox" data-opt="showConstraints" aria-label="Constraints" /></label></div>
+          <div class="set-row"><div><b>Edge labels</b></div><label class="toggle"><input type="checkbox" data-opt="showLabels" aria-label="Edge labels" /></label></div>
+          <div class="set-row"><div><b>Rounded corners</b></div><label class="toggle"><input type="checkbox" data-opt="rounded" aria-label="Rounded corners" /></label></div>
+        </section>
+
+        <section class="set-section" data-section="data">
+          <h3>Data</h3>
+          <p class="set-hint">How tables and collections are browsed in Data mode.</p>
+          <div class="set-row">
+            <div><b>Live refresh</b><small>Read the open table and the sidebar counts again on a timer. The SQL and Aggregations tabs never re-run.</small></div>
+            <label class="toggle"><input type="checkbox" data-opt="liveRefresh" aria-label="Live refresh" /></label>
+          </div>
+          <div class="set-row">
+            <div><b>Refresh every</b><small>Shorter is fresher; longer sends fewer queries to your database.</small></div>
+            <div class="segmented" data-opt="liveInterval">
+              <button data-value="1000">1 s</button>
+              <button data-value="2000">2 s</button>
+              <button data-value="5000">5 s</button>
+              <button data-value="10000">10 s</button>
+            </div>
+          </div>
+          <div class="set-row">
+            <div><b>Rows per page</b><small>For tables and collections you open from now on.</small></div>
+            <div class="segmented" data-opt="pageSize">
+              <button data-value="20">20</button>
+              <button data-value="50">50</button>
+              <button data-value="100">100</button>
+            </div>
+          </div>
+          <div class="set-row">
+            <div><b>Open as</b><small>The first view of a table or collection.</small></div>
+            <div class="segmented" data-opt="docLayout">
+              <button data-value="list">List</button>
+              <button data-value="json">JSON</button>
+              <button data-value="table">Table</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="set-section" data-section="connections">
+          <h3>Connections</h3>
+          <p class="set-hint">Saved database connections. Their connection strings and passwords live in your system keychain.</p>
+          <div class="conn-list" id="settingsConnections"></div>
+          <div class="set-actions"><button class="btn" id="settingsNewConnection">New connection</button></div>
+        </section>
+
+        <section class="set-section" data-section="updates">
+          <h3>Updates</h3>
+          <p class="set-hint">New versions are downloaded from GitHub Releases and checked against the signing key built into the app.</p>
+          <div class="set-row">
+            <div><b>Install updates automatically</b><small>Download in the background and ask to restart.</small></div>
+            <label class="toggle"><input type="checkbox" data-opt="autoUpdate" aria-label="Install updates automatically" /></label>
+          </div>
+          <div class="set-row">
+            <div><b id="appVersion">Version</b><p class="update-status" id="updateStatus" hidden></p></div>
+            <button class="btn" id="btnCheckUpdates">Check for updates</button>
+          </div>
+        </section>
+
+        <section class="set-section" data-section="privacy">
+          <h3>Privacy</h3>
+          <p class="set-hint">Prismagram has no server and sends no telemetry. Your schema stays on your computer; the only connections are the update check and the databases you open.</p>
+          <div class="set-row">
+            <div><b>Clear all data</b><small>Closes open connections and removes saved connections, their passwords and your settings. Your files are not touched.</small></div>
+            <button class="btn danger" id="btnClearData">Clear all data</button>
+          </div>
+        </section>
+
+        <section class="set-section" data-section="about">
+          <h3>About</h3>
+          <p class="set-hint">Prisma schemas as UML class diagrams, and a client for PostgreSQL, Supabase, Neon and MongoDB. MIT licensed.</p>
+          <div class="set-links">
+            <span>Website</span><code>kingvic300.github.io/Prismagram</code>
+            <span>Source code</span><code>github.com/Kingvic300/Prismagram</code>
+            <span>Report a problem</span><code>github.com/Kingvic300/Prismagram/issues</code>
+          </div>
+          <h4>Keyboard shortcuts</h4>
+          <div class="shortcuts">
+            <span><kbd>Ctrl 1</kbd> / <kbd>Ctrl 2</kbd></span><span>Diagram / Data</span>
+            <span><kbd>Ctrl ,</kbd></span><span>Settings</span>
+            <span><kbd>Ctrl O</kbd></span><span>Open a schema</span>
+            <span><kbd>Ctrl S</kbd></span><span>Save the schema</span>
+            <span><kbd>Ctrl E</kbd> / <kbd>Ctrl Shift E</kbd></span><span>Export SVG / PNG</span>
+            <span><kbd>Ctrl B</kbd></span><span>Show or hide the editor</span>
+            <span><kbd>Ctrl 0</kbd></span><span>Fit the diagram</span>
+            <span><kbd>Ctrl Enter</kbd></span><span>Run the query</span>
+            <span><kbd>Ctrl W</kbd></span><span>Close the data tab</span>
+          </div>
+        </section>
+      </div>
     </main>
 
     <footer class="statusbar">
