@@ -1,0 +1,1 @@
+Prismagram is now live: type a Prisma model and watch the UML diagram draw itself, then flip to Data to browse and edit your Postgres or MongoDB rows, with the exact SQL shown before it runs. Free and open source for Linux, macOS and Windows: kingvic300.github.io/Prismagram

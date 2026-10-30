@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Prismagram intro</title>
+    <script src="assets/js/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Inter Variable";
+        src: url("assets/fonts/inter.woff2") format("woff2");
+        font-weight: 100 900;
+      }
+      @font-face {
+        font-family: "JetBrains Mono Variable";
+        src: url("assets/fonts/jetbrains-mono.woff2") format("woff2");
+        font-weight: 100 800;
+      }
+      :root {
+        --bg: #0e0f11;
+        --panel: #141518;
+        --panel-2: #1a1b1f;
+        --raised: #212227;
+        --border: rgba(255, 255, 255, 0.08);
+        --border-strong: rgba(255, 255, 255, 0.13);
+        --text: #ededf0;
+        --text-2: #a5a6ae;
+        --muted: #82838c;
+        --accent: #5c9eff;
+        --accent-strong: #3b6fe0;
+        --ok: #5fd39a;
+        --kw: #c792ea;
+        --ty: #7dd3fc;
+        --at: #f9a8d4;
+        --str: #a5e075;
+        --punct: #8b95a7;
+        --sans: "Inter Variable", sans-serif;
+        --mono: "JetBrains Mono Variable", monospace;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+      }
+      .fill {
+        position: absolute;
+        inset: 0;
+      }
+      .kw { color: var(--kw); }
+      .ty { color: var(--ty); }
+      .at { color: var(--at); }
+      .str { color: var(--str); }
+      .pu { color: var(--punct); }
+
+      /* ---------- scene 1: the schema ---------- */
+      #s1 { z-index: 1; }
+      #s1 .fill {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 56px;
+        background: var(--bg);
+      }
+      #hook {
+        margin: 0;
+        font-size: 92px;
+        font-weight: 680;
+        letter-spacing: -0.035em;
+      }
+      .editor {
+        width: 1300px;
+        border-radius: 18px;
+        background: var(--panel);
+        border: 1px solid var(--border-strong);
+        overflow: hidden;
+      }
+      .editor-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 58px;
+        padding: 0 24px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text-2);
+        font: 500 26px var(--mono);
+      }
+      .editor-head i {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--raised);
+      }
+      .editor-head span { margin-left: 12px; }
+      .code {
+        padding: 26px 0 30px;
+        font: 27px/46px var(--mono);
+      }
+      .ln {
+        display: flex;
+        white-space: pre;
+      }
+      .no {
+        width: 84px;
+        padding-right: 26px;
+        text-align: right;
+        color: var(--muted);
+        opacity: 0.6;
+        flex: none;
+      }
+      .tx {
+        display: inline-block;
+        overflow: hidden;
+        white-space: pre;
+        vertical-align: top;
+      }
+
+      /* ---------- scene 2: the diagram ---------- */
+      #s2 { z-index: 2; }
+      #s2 .fill {
+        background-color: #f4f5f4;
+        background-image: radial-gradient(#d4dad4 2.4px, transparent 2.4px);
+        background-size: 40px 40px;
+      }
+      .caption-col {
+        position: absolute;
+        left: 120px;
+        top: 0;
+        bottom: 0;
+        width: 640px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 22px;
+        color: #111316;
+      }
+      .caption-col h2 {
+        margin: 0;
+        font-size: 84px;
+        line-height: 1.02;
+        font-weight: 700;
+        letter-spacing: -0.035em;
+      }
+      .caption-col p {
+        margin: 0;
+        font-size: 50px;
+        font-weight: 500;
+        letter-spacing: -0.02em;
+        color: #3d6fd6;
+      }
+      .uml {
+        position: absolute;
+        background: #fff;
+        border: 2.5px solid #2b2b2b;
+        color: #1a1a1a;
+        box-shadow: 0 18px 40px rgba(20, 30, 20, 0.12);
+      }
+      .uml h3 {
+        margin: 0;
+        height: 62px;
+        line-height: 62px;
+        text-align: center;
+        background: #d5e8d4;
+        border-bottom: 2.5px solid #2b2b2b;
+        font-size: 32px;
+        font-weight: 700;
+      }
+      .uml .comp {
+        padding: 12px 22px;
+        font-size: 28px;
+        line-height: 40px;
+        font-style: italic;
+      }
+      .uml .comp + .comp { border-top: 2.5px solid #2b2b2b; }
+      .wire {
+        position: absolute;
+        inset: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: visible;
+      }
+      .wire path {
+        fill: none;
+        stroke: #3a3a3a;
+        stroke-width: 3;
+      }
+      .mult {
+        position: absolute;
+        font-size: 28px;
+        font-weight: 600;
+        color: #3a3a3a;
+      }
+
+      /* ---------- scenes 3 + 4: the app ---------- */
+      #s3 { z-index: 3; }
+      #s3 .fill { background: var(--bg); }
+      .topbar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 84px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 0 28px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--border);
+      }
+      .topbar img { width: 44px; height: 44px; }
+      .topbar b { font-size: 28px; font-weight: 650; letter-spacing: -0.01em; margin-right: 18px; }
+      .switch {
+        position: relative;
+        display: grid;
+        grid-template-columns: 170px 170px;
+        height: 54px;
+        padding: 5px;
+        border-radius: 13px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+      }
+      .thumb {
+        position: absolute;
+        top: 5px;
+        left: 5px;
+        width: 170px;
+        height: 44px;
+        border-radius: 9px;
+        background: var(--raised);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 0 0 1px var(--border-strong);
+      }
+      .switch span {
+        position: relative;
+        display: grid;
+        place-items: center;
+        font-size: 26px;
+        font-weight: 500;
+        color: var(--text-2);
+      }
+      .switch .on { color: var(--text); }
+      .newconn {
+        margin-left: auto;
+        height: 52px;
+        padding: 0 24px;
+        display: grid;
+        place-items: center;
+        border-radius: 11px;
+        background: #2d62d4;
+        font-size: 26px;
+        font-weight: 600;
+      }
+      .side {
+        position: absolute;
+        left: 0;
+        top: 84px;
+        bottom: 0;
+        width: 420px;
+        padding: 24px 16px;
+        background: var(--panel);
+        border-right: 1px solid var(--border);
+        box-sizing: border-box;
+      }
+      .side h4 {
+        margin: 6px 12px 22px;
+        font-size: 28px;
+        font-weight: 600;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        height: 54px;
+        padding: 0 14px;
+        border-radius: 10px;
+        font-size: 28px;
+        color: var(--text-2);
+      }
+      .row .dot { width: 13px; height: 13px; border-radius: 50%; background: var(--ok); }
+      .row small { margin-left: auto; color: var(--text-2); font-size: 26px; }
+      .row.conn { color: var(--text); font-weight: 600; }
+      .row.schema { padding-left: 38px; }
+      .row.table { padding-left: 66px; }
+      .row.active { background: rgba(92, 158, 255, 0.15); color: var(--text); }
+      .main {
+        position: absolute;
+        left: 420px;
+        right: 0;
+        top: 84px;
+        bottom: 0;
+      }
+      .canvas-mini {
+        position: absolute;
+        inset: 0;
+        background-color: #f4f5f4;
+        background-image: radial-gradient(#d4dad4 2px, transparent 2px);
+        background-size: 34px 34px;
+      }
+      .canvas-mini .boxes {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1920px;
+        height: 1080px;
+        transform-origin: 0 0;
+        transform: translate(-260px, 40px) scale(0.78);
+      }
+      .data {
+        position: absolute;
+        inset: 0;
+        padding: 46px 64px;
+        box-sizing: border-box;
+      }
+      .data h2 {
+        margin: 0 0 30px;
+        font-size: 62px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+      .card {
+        position: relative;
+        margin-bottom: 18px;
+        padding: 22px 30px;
+        border-radius: 16px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        font: 28px/46px var(--mono);
+      }
+      .card .k { font-weight: 700; color: var(--text); }
+      .card .c { color: var(--muted); margin-right: 12px; }
+      .swap { position: relative; display: inline-block; }
+      .swap .after { position: absolute; left: 0; top: 0; white-space: nowrap; }
+      .dim { position: absolute; inset: 0; background: rgba(5, 6, 8, 0.66); }
+      .over-caption {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 118px;
+        text-align: center;
+        font-size: 64px;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+      .dialog {
+        position: absolute;
+        left: 470px;
+        top: 214px;
+        width: 980px;
+        height: 790px;
+        box-sizing: border-box;
+        padding: 36px 40px;
+        border-radius: 22px;
+        background: var(--panel);
+        border: 1px solid var(--border-strong);
+        box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+      }
+      .dialog h3 { margin: 0 0 22px; font-size: 36px; font-weight: 650; }
+      .json {
+        margin: 0;
+        padding: 18px 24px;
+        border-radius: 12px;
+        border: 2px solid var(--accent);
+        background: var(--bg);
+        font: 28px/44px var(--mono);
+        white-space: pre;
+      }
+      .sel { background: rgba(92, 158, 255, 0.35); border-radius: 4px; }
+      .label { margin: 22px 0 10px; font-size: 26px; font-weight: 600; color: var(--text-2); }
+      .runs {
+        position: relative;
+        height: 158px;
+        padding: 16px 24px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        font: 28px/42px var(--mono);
+        color: var(--ty);
+        white-space: pre;
+        box-sizing: border-box;
+      }
+      .runs > div { position: absolute; left: 24px; top: 16px; }
+      .runs .none { color: var(--muted); }
+      .actions {
+        position: absolute;
+        right: 40px;
+        bottom: 36px;
+        display: flex;
+        gap: 16px;
+      }
+      .btn {
+        display: grid;
+        place-items: center;
+        height: 56px;
+        padding: 0 30px;
+        border-radius: 12px;
+        font-size: 26px;
+        font-weight: 600;
+        border: 1px solid var(--border-strong);
+        background: var(--raised);
+      }
+      .btn.primary { background: var(--accent-strong); border-color: var(--accent-strong); }
+      .cursor {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 44px;
+        height: 54px;
+      }
+      .toast {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 70px;
+        display: flex;
+        justify-content: center;
+      }
+      .toast div {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 18px 30px;
+        border-radius: 16px;
+        background: var(--raised);
+        border: 1px solid var(--border-strong);
+        font-size: 28px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+      }
+      .toast i { width: 14px; height: 14px; border-radius: 50%; background: var(--ok); }
+
+      /* ---------- scene 5: outro ---------- */
+      #s5 { z-index: 4; }
+      #s5 .fill {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        background: var(--bg);
+      }
+      #outro-logo { width: 150px; height: 150px; margin-bottom: 34px; }
+      #outro-name {
+        margin: 0;
+        font-size: 132px;
+        font-weight: 680;
+        letter-spacing: -0.04em;
+      }
+      #outro-line {
+        margin: 18px 0 0;
+        font-size: 46px;
+        font-weight: 500;
+        color: var(--text-2);
+        letter-spacing: -0.015em;
+      }
+      #outro-meta { margin: 30px 0 0; font-size: 30px; color: var(--muted); }
+      #outro-url {
+        margin: 26px 0 0;
+        font-size: 38px;
+        font-weight: 600;
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="22">
+      <!-- 1. Hook: a Prisma model types itself -->
+      <section id="s1" class="clip" data-start="0" data-duration="4.4" data-track-index="0">
+        <div class="fill">
+          <h1 id="hook">You wrote a schema.</h1>
+          <div class="editor" id="editor">
+            <div class="editor-head"><i></i><i></i><i></i><span>schema.prisma</span></div>
+            <div class="code">
+              <div class="ln"><span class="no">1</span><span class="tx"><span class="kw">model</span> <span class="ty">Post</span> <span class="pu">{</span></span></div>
+              <div class="ln"><span class="no">2</span><span class="tx">  id       <span class="ty">Int</span>     <span class="at">@id</span> <span class="at">@default</span><span class="pu">(</span>autoincrement<span class="pu">())</span></span></div>
+              <div class="ln"><span class="no">3</span><span class="tx">  title    <span class="ty">String</span></span></div>
+              <div class="ln"><span class="no">4</span><span class="tx">  author   <span class="ty">User</span>    <span class="at">@relation</span><span class="pu">(</span>fields<span class="pu">:</span> <span class="pu">[</span>authorId<span class="pu">])</span></span></div>
+              <div class="ln"><span class="no">5</span><span class="tx">  comments <span class="ty">Comment</span><span class="pu">[]</span></span></div>
+              <div class="ln"><span class="no">6</span><span class="tx"><span class="pu">}</span></span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Reveal: the class diagram draws itself -->
+      <section id="s2" class="clip" data-start="3.7" data-duration="5.4" data-track-index="1">
+        <div class="fill" id="s2-in">
+          <div class="caption-col">
+            <h2 id="cap-draws">Prismagram draws it.</h2>
+            <p id="cap-live">Live, as you type.</p>
+          </div>
+          <div class="boxes">
+            <svg class="wire" viewBox="0 0 1920 1080">
+              <path id="w1" d="M1360 412 V500 H1080 V590" />
+              <path id="w2" d="M1360 500 H1640 V590" />
+            </svg>
+            <div class="mult" id="m1" style="left: 1374px; top: 420px">1</div>
+            <div class="mult" id="m2" style="left: 1092px; top: 548px">0..*</div>
+            <div class="mult" id="m3" style="left: 1652px; top: 548px">0..*</div>
+            <div class="uml" id="b-user" style="left: 1200px; top: 120px; width: 320px; height: 292px">
+              <h3>User</h3>
+              <div class="comp"><div>+id: Int</div><div>+email: String</div><div>+name: String?</div></div>
+              <div class="comp">+posts: Post[]</div>
+            </div>
+            <div class="uml" id="b-post" style="left: 900px; top: 590px; width: 360px; height: 292px">
+              <h3>Post</h3>
+              <div class="comp"><div>+id: Int</div><div>+title: String</div><div>+authorId: Int</div></div>
+              <div class="comp">+author: User</div>
+            </div>
+            <div class="uml" id="b-comment" style="left: 1460px; top: 590px; width: 360px; height: 252px">
+              <h3>Comment</h3>
+              <div class="comp"><div>+id: Int</div><div>+body: String</div></div>
+              <div class="comp">+post: Post</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3 + 4. The app: flip to Data, then edit a row with its SQL shown -->
+      <section id="s3" class="clip" data-start="8.6" data-duration="10.0" data-track-index="2">
+        <div class="fill" id="s3-in">
+          <div class="topbar">
+            <img src="assets/img/logo.svg" alt="" />
+            <b>Prismagram</b>
+            <div class="switch">
+              <div class="thumb" id="thumb"></div>
+              <span id="sw-diagram" class="on">Diagram</span>
+              <span id="sw-data">Data</span>
+            </div>
+            <div class="newconn">+ New connection</div>
+          </div>
+          <div class="side">
+            <h4>Connections</h4>
+            <div class="row conn" id="r-conn"><span class="dot"></span>Sovra<small>PostgreSQL</small></div>
+            <div class="row schema" id="r-schema">public</div>
+            <div class="row table active" id="r-users">users<small>19</small></div>
+            <div class="row table" id="r-posts">posts<small>4.2k</small></div>
+            <div class="row table" id="r-comments">comments<small>19k</small></div>
+          </div>
+          <div class="main">
+            <div class="canvas-mini" id="mini">
+              <div class="boxes">
+                <svg class="wire" viewBox="0 0 1920 1080">
+                  <path d="M1360 412 V500 H1080 V590" />
+                  <path d="M1360 500 H1640 V590" />
+                </svg>
+                <div class="uml" style="left: 1200px; top: 120px; width: 320px; height: 292px">
+                  <h3>User</h3>
+                  <div class="comp"><div>+id: Int</div><div>+email: String</div><div>+name: String?</div></div>
+                  <div class="comp">+posts: Post[]</div>
+                </div>
+                <div class="uml" style="left: 900px; top: 590px; width: 360px; height: 292px">
+                  <h3>Post</h3>
+                  <div class="comp"><div>+id: Int</div><div>+title: String</div><div>+authorId: Int</div></div>
+                  <div class="comp">+author: User</div>
+                </div>
+                <div class="uml" style="left: 1460px; top: 590px; width: 360px; height: 252px">
+                  <h3>Comment</h3>
+                  <div class="comp"><div>+id: Int</div><div>+body: String</div></div>
+                  <div class="comp">+post: Post</div>
+                </div>
+              </div>
+            </div>
+            <div class="data" id="data" data-layout-allow-occlusion>
+              <h2 id="cap-data">Then open the data.</h2>
+              <div class="card" id="card1">
+                <div><span class="k">id</span><span class="c">:</span><span style="color: #e9a27a">c9a10f2e-4b11-4d2c-9a3e-100000</span></div>
+                <div><span class="k">email</span><span class="c">:</span><span class="str">"ada@example.com"</span></div>
+                <div>
+                  <span class="k">name</span><span class="c">:</span><span class="swap str"><span id="name-before">"Ada Lovelace"</span><span class="after" id="name-after">"Ada King"</span></span>
+                </div>
+                <div><span class="k">is_vip</span><span class="c">:</span><span class="kw">true</span></div>
+              </div>
+              <div class="card" id="card2">
+                <div><span class="k">id</span><span class="c">:</span><span style="color: #e9a27a">c9a11f2e-4b11-4d2c-9a3e-107919</span></div>
+                <div><span class="k">email</span><span class="c">:</span><span class="str">"grace@example.com"</span></div>
+                <div><span class="k">name</span><span class="c">:</span><span class="str">"Grace Hopper"</span></div>
+                <div><span class="k">is_vip</span><span class="c">:</span><span class="kw">false</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="edit-layer" class="fill" data-layout-allow-occlusion>
+            <div class="dim"></div>
+            <div class="over-caption" id="cap-sql">Every button shows its SQL.</div>
+            <div class="dialog" id="dialog">
+              <h3>Edit row</h3>
+              <div class="json"><span class="pu">{</span>
+  <span class="ty">"id"</span><span class="pu">:</span> <span class="str">"c9a10f2e-4b11-4d2c-9a3e-100000"</span><span class="pu">,</span>
+  <span class="ty">"email"</span><span class="pu">:</span> <span class="str">"ada@example.com"</span><span class="pu">,</span>
+  <span class="ty">"name"</span><span class="pu">:</span> <span class="str">"Ada <span class="tx" id="old-word"><span id="old-sel">Lovelace</span></span><span class="tx" id="new-word">King</span>"</span><span class="pu">,</span>
+  <span class="ty">"is_vip"</span><span class="pu">:</span> <span class="kw">true</span>
+<span class="pu">}</span></div>
+              <div class="label">Runs</div>
+              <div class="runs">
+                <div class="none" id="runs-none">-- Nothing changed yet</div>
+                <div id="runs-sql">UPDATE "public"."users"
+SET "name" = 'Ada King'
+WHERE "id" = 'c9a10f2e-4b11-4d2c-9a3e-100000';</div>
+              </div>
+              <div class="actions">
+                <div class="btn">Cancel</div>
+                <div class="btn primary" id="update-btn">Update</div>
+              </div>
+            </div>
+            <svg class="cursor" id="cursor" viewBox="0 0 24 30"><path d="M2 2 L2 24 L8 18 L12 28 L16 26 L12 17 L20 17 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round" /></svg>
+          </div>
+
+          <div class="toast" id="toast"><div><i></i>Row updated</div></div>
+        </div>
+      </section>
+
+      <!-- 5. Outro -->
+      <section id="s5" class="clip" data-start="18.44" data-duration="3.56" data-track-index="3">
+        <div class="fill" id="s5-in">
+          <img id="outro-logo" src="assets/img/logo.svg" alt="" />
+          <h1 id="outro-name">Prismagram</h1>
+          <p id="outro-line">Prisma diagrams + your Postgres &amp; MongoDB data</p>
+          <p id="outro-meta">Free and open source · Linux · macOS · Windows</p>
+          <p id="outro-url">kingvic300.github.io/Prismagram</p>
+        </div>
+      </section>
+
+      <!-- Audio -->
+      <audio id="bgm" src="assets/music/happy-beats-business-moves-vol-11-by-ende-dot-app.mp3" data-start="0" data-duration="22" data-track-index="10" data-volume="1"></audio>
+      <audio id="k1" src="assets/sfx/keypress-001.wav" data-start="0.35" data-track-index="11" data-volume="0.45"></audio>
+      <audio id="k2" src="assets/sfx/keypress-004.wav" data-start="0.85" data-track-index="12" data-volume="0.45"></audio>
+      <audio id="k3" src="assets/sfx/keypress-007.wav" data-start="1.35" data-track-index="13" data-volume="0.45"></audio>
+      <audio id="k4" src="assets/sfx/keypress-001.wav" data-start="1.85" data-track-index="14" data-volume="0.45"></audio>
+      <audio id="k5" src="assets/sfx/keypress-004.wav" data-start="2.35" data-track-index="15" data-volume="0.45"></audio>
+      <audio id="pop1" src="assets/sfx/drop_001.ogg" data-start="4.23" data-track-index="16" data-volume="0.7"></audio>
+      <audio id="pop2" src="assets/sfx/drop_002.ogg" data-start="5.28" data-track-index="17" data-volume="0.7"></audio>
+      <audio id="pop3" src="assets/sfx/drop_003.ogg" data-start="6.34" data-track-index="18" data-volume="0.7"></audio>
+      <audio id="flip" src="assets/sfx/switch_002.ogg" data-start="8.96" data-track-index="19" data-volume="0.75"></audio>
+      <audio id="row1" src="assets/sfx/drop_001.ogg" data-start="9.5" data-track-index="20" data-volume="0.45"></audio>
+      <audio id="row2" src="assets/sfx/drop_002.ogg" data-start="10.54" data-track-index="21" data-volume="0.45"></audio>
+      <audio id="row3" src="assets/sfx/drop_003.ogg" data-start="11.6" data-track-index="22" data-volume="0.45"></audio>
+      <audio id="k6" src="assets/sfx/keypress-007.wav" data-start="13.0" data-track-index="23" data-volume="0.45"></audio>
+      <audio id="k7" src="assets/sfx/keypress-001.wav" data-start="13.2" data-track-index="24" data-volume="0.45"></audio>
+      <audio id="k8" src="assets/sfx/keypress-004.wav" data-start="13.4" data-track-index="25" data-volume="0.45"></audio>
+      <audio id="click" src="assets/sfx/mouseclick1.ogg" data-start="16.95" data-track-index="26" data-volume="0.8"></audio>
+      <audio id="ding" src="assets/sfx/impactGlass_light_001.ogg" data-start="17.3" data-track-index="27" data-volume="0.55"></audio>
+      <audio id="bell" src="assets/sfx/impactBell_heavy_000.ogg" data-start="18.44" data-track-index="28" data-volume="0.6"></audio>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const ease = "power3.out";
+
+      // ---- 1. Hook (0 - 3.7s)
+      tl.fromTo("#editor", { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease }, 0.15);
+      // Each code line types out character by character, in steps so it reads as typing.
+      const lines = [...document.querySelectorAll("#editor .tx")];
+      const starts = [0.35, 0.7, 1.35, 1.65, 2.35, 2.85];
+      lines.forEach((el, i) => {
+        const n = el.textContent.length;
+        tl.fromTo(el, { width: "0ch" }, { width: `${n}ch`, duration: Math.min(0.6, n * 0.014), ease: `steps(${n})` }, starts[i]);
+      });
+
+      // ---- 2. Diagram (3.7 - 9.0s)
+      // beat-locked: 3.70s, the canvas slides in on the first strong cue
+      tl.fromTo("#s2-in", { x: 1920 }, { x: 0, duration: 0.6, ease: "power4.out" }, 3.7);
+      tl.fromTo("#cap-draws", { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease }, 4.0);
+      tl.fromTo("#cap-live", { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease }, 5.3);
+      // beat-grid: boxes at 4.23s, 5.28s, 6.34s (every other beat, so each name can be read)
+      [["#b-user", 4.23], ["#b-post", 5.28], ["#b-comment", 6.34]].forEach(([id, at]) => {
+        tl.fromTo(id, { scale: 0.86, opacity: 0, y: 24 }, { scale: 1, opacity: 1, y: 0, duration: 0.45, ease: "back.out(1.6)" }, at);
+      });
+      ["#w1", "#w2"].forEach((id, i) => {
+        const len = document.querySelector(id).getTotalLength();
+        tl.fromTo(id, { strokeDasharray: len, strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.7, ease: "power2.inOut" }, 7.0 + i * 0.2);
+      });
+      tl.fromTo(["#m1", "#m2", "#m3"], { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3, stagger: 0.12, ease }, 7.6);
+
+      // ---- 3. Flip to Data (8.6 - 13.0s)
+      tl.fromTo("#s3-in", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.35, ease }, 8.6);
+      tl.set("#edit-layer", { opacity: 0 }, 8.6);
+      tl.set("#toast", { opacity: 0 }, 8.6);
+      tl.set(".side .row", { opacity: 0, x: -20 }, 8.6);
+      tl.set("#data", { opacity: 0 }, 8.6);
+      // beat-locked: 8.96s, the switch thumb slides to Data
+      tl.fromTo("#thumb", { x: 0 }, { x: 170, duration: 0.35, ease: "power3.inOut" }, 8.96);
+      tl.to("#sw-diagram", { color: "#a5a6ae", duration: 0.2 }, 9.0);
+      tl.to("#sw-data", { color: "#ededf0", duration: 0.2 }, 9.0);
+      tl.to("#mini", { opacity: 0, duration: 0.35 }, 9.1);
+      tl.fromTo("#data", { opacity: 0 }, { opacity: 1, duration: 0.35 }, 9.2);
+      tl.fromTo("#cap-data", { y: 20 }, { y: 0, duration: 0.4, ease }, 9.2);
+      tl.to(["#r-conn", "#r-schema"], { opacity: 1, x: 0, duration: 0.3, stagger: 0.12, ease }, 9.15);
+      // beat-grid: sidebar tables at 9.50s, 10.54s, 11.60s
+      [["#r-users", 9.5], ["#r-posts", 10.54], ["#r-comments", 11.6]].forEach(([id, at]) => {
+        tl.to(id, { opacity: 1, x: 0, duration: 0.3, ease }, at);
+      });
+      tl.fromTo("#card1", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4, ease }, 9.8);
+      tl.fromTo("#card2", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4, ease }, 10.3);
+      tl.set("#name-after", { opacity: 0 }, 8.6);
+
+      // ---- 4. Edit with the SQL shown (12.2 - 18.44s)
+      tl.to("#edit-layer", { opacity: 1, duration: 0.3 }, 12.2);
+      // The rows step back while the dialog is up and come back with the new name.
+      tl.to("#data", { opacity: 0, duration: 0.25 }, 12.2);
+      tl.fromTo("#cap-sql", { y: -20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease }, 12.3);
+      tl.fromTo("#dialog", { scale: 0.96, y: 20, opacity: 0 }, { scale: 1, y: 0, opacity: 1, duration: 0.35, ease }, 12.2);
+      tl.set("#new-word", { width: "0ch" }, 8.6);
+      tl.set("#old-sel", { backgroundColor: "rgba(92,158,255,0)" }, 8.6);
+      tl.to("#old-sel", { backgroundColor: "rgba(92,158,255,0.35)", duration: 0.15 }, 12.7);
+      tl.set("#old-word", { width: "0ch" }, 12.95);
+      tl.to("#new-word", { width: "4ch", duration: 0.5, ease: "steps(4)" }, 12.95);
+      tl.set("#runs-sql", { opacity: 0 }, 8.6);
+      tl.to("#runs-none", { opacity: 0, duration: 0.15 }, 13.45);
+      tl.fromTo("#runs-sql", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.3, ease }, 13.5);
+      tl.set("#cursor", { x: 1500, y: 1080, opacity: 0 }, 8.6);
+      tl.set("#cursor", { opacity: 1 }, 16.0);
+      tl.to("#cursor", { x: 1334, y: 908, duration: 0.8, ease: "power2.inOut" }, 16.0);
+      tl.to("#update-btn", { scale: 0.95, duration: 0.08 }, 16.95);
+      tl.to("#update-btn", { scale: 1, duration: 0.12 }, 17.03);
+      tl.to("#edit-layer", { opacity: 0, duration: 0.3 }, 17.1);
+      tl.to("#data", { opacity: 1, duration: 0.3 }, 17.1);
+      tl.set("#name-after", { opacity: 1 }, 17.2);
+      tl.set("#name-before", { opacity: 0 }, 17.2);
+      tl.fromTo("#toast", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.35, ease }, 17.3);
+
+      // ---- 5. Outro (18.44 - 22s)
+      tl.fromTo("#s5-in", { opacity: 0 }, { opacity: 1, duration: 0.3 }, 18.44);
+      // beat-grid: 18.44s, the logo lands on the beat after the toast has been read
+      tl.fromTo("#outro-logo", { scale: 0.6, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.55, ease: "back.out(1.7)" }, 18.44);
+      tl.fromTo("#outro-name", { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease }, 18.6);
+      tl.fromTo("#outro-line", { y: 24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease }, 18.95);
+      tl.fromTo(["#outro-meta", "#outro-url"], { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, stagger: 0.25, ease }, 19.3);
+      tl.set("#bgm", { volume: 0.55 }, 0);
+      tl.to("#bgm", { volume: 0, duration: 1.6 }, 20.4);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
