@@ -1,5 +1,7 @@
 name: Download page
-# Publishes site/ to GitHub Pages. The page reads the release list from the GitHub API.
+# Publishes site/ to GitHub Pages: the download page, install.sh, and the signed APT and RPM
+# repositories built from the latest release (scripts/build_linux_repos.sh). The release
+# workflow starts this after every release.
 on:
   push:
     branches: [main]
@@ -25,6 +27,13 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Build the APT and RPM repositories
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq createrepo-c apt-utils
+          scripts/build_linux_repos.sh site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  actions: write   # start the Pages workflow, which rebuilds the APT and RPM repositories
 
 jobs:
   build:
@@ -90,3 +91,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/release_notes.py "${{ github.ref_name }}"
+      - name: Update the Homebrew cask and Scoop manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git fetch origin main && git checkout main
+          python3 scripts/package_manifests.py "${{ github.ref_name }}"
+          git add Casks bucket
+          if ! git diff --cached --quiet; then
+            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "chore(packages): Homebrew and Scoop manifests for ${{ github.ref_name }}"
+            git push origin main
+          fi
+      - name: Rebuild the APT and RPM repositories
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run pages.yml --ref main

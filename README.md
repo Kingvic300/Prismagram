@@ -41,8 +41,16 @@ Licensed under [MIT](LICENSE).
 
 ## Install (Linux / Kali)
 
-Download from the [latest release](https://github.com/Kingvic300/Prismagram/releases/latest)
-or the [download page](https://kingvic300.github.io/Prismagram/).
+Install from the terminal on any distribution. Debian, Ubuntu, Kali, Fedora and openSUSE get
+Prismagram's signed package repository, so `apt upgrade`, `dnf upgrade` or `zypper update`
+keep it current; anything else gets the AppImage in `/opt/prismagram`.
+
+```bash
+curl -fsSL https://kingvic300.github.io/Prismagram/install.sh | sudo sh
+```
+
+Or download a file from the [latest release](https://github.com/Kingvic300/Prismagram/releases/latest)
+or the [download page](https://kingvic300.github.io/Prismagram/):
 
 | Distribution | File | Install |
 | --- | --- | --- |
@@ -62,7 +70,15 @@ launch and every few hours, downloads new versions in the background, and shows 
 **Restart now** banner. Turn this off in Settings → App. The AppImage updates in place
 without a password; the `.deb` and `.rpm` ask for your password to install the update.
 
-**macOS and Windows** builds are attached to each release too. They are not code-signed yet:
+**macOS and Windows** builds are attached to each release too, and this repository is a
+Homebrew tap and a Scoop bucket:
+
+```bash
+brew tap kingvic300/prismagram https://github.com/Kingvic300/Prismagram && brew install --cask prismagram
+scoop bucket add prismagram https://github.com/Kingvic300/Prismagram; scoop install prismagram
+```
+
+The builds are not code-signed yet:
 on macOS right-click the app and choose Open the first time; on Windows choose
 More info → Run anyway if SmartScreen warns you.
 

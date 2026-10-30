@@ -4,18 +4,25 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Download Prismagram</title>
-<meta name="description" content="Prismagram turns Prisma schema files into clean UML class diagrams. Free and open source for Linux, macOS and Windows.">
+<meta name="description" content="Prismagram draws Prisma schemas as UML class diagrams and browses PostgreSQL, Supabase and MongoDB data. Free and open source for Linux, macOS and Windows.">
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <style>
+  @font-face {
+    font-family: "Inter Variable";
+    src: url("fonts/inter.woff2") format("woff2");
+    font-weight: 100 900;
+    font-display: swap;
+  }
+  /* Same palette as the app: cool neutrals and one blue accent. */
   :root {
-    --ink: #0b0e14; --panel: #10141c; --raised: #1a2130; --line: #232b3a; --line-strong: #2f394b;
-    --fg: #e5e9f0; --muted: #a3adbf; --faint: #6b778c; --teal: #14b8a6; --blue: #2563eb;
+    --ink: #0e0f11; --panel: #15161a; --raised: #1f2026; --line: #26272d; --line-strong: #34353c;
+    --fg: #ededf0; --muted: #a5a6ae; --faint: #82838c; --act: #5c9eff; --act-strong: #3b6fe0;
   }
   * { box-sizing: border-box; }
   html { background: var(--ink); color: var(--fg); }
-  body { margin: 0; font: 15px/1.55 Inter, "Noto Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  a { color: var(--teal); }
-  :focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; border-radius: 6px; }
+  body { margin: 0; font: 15px/1.55 "Inter Variable", Inter, "Noto Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  a { color: var(--act); }
+  :focus-visible { outline: 2px solid var(--act); outline-offset: 2px; border-radius: 6px; }
   .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
   header { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 17px; color: var(--fg); text-decoration: none; }
@@ -24,20 +31,19 @@
   nav a:hover { color: var(--fg); }
 
   .hero { text-align: center; padding: 48px 0 32px; }
-  h1 { font-size: clamp(34px, 5.4vw, 56px); line-height: 1.05; letter-spacing: -0.03em; margin: 0 auto; max-width: 16ch; font-weight: 700; }
-  h1 span { background: linear-gradient(90deg, var(--teal), #60a5fa); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  h1 { font-size: clamp(34px, 5.4vw, 56px); line-height: 1.05; letter-spacing: -0.03em; margin: 0 auto; max-width: 18ch; font-weight: 650; }
   .lede { color: var(--muted); font-size: 18px; max-width: 54ch; margin: 18px auto 30px; }
-  .primary { display: inline-flex; align-items: center; gap: 10px; background: linear-gradient(135deg, var(--teal), var(--blue)); color: white; font-weight: 600; padding: 13px 22px; border-radius: 10px; text-decoration: none; box-shadow: 0 10px 30px rgba(37, 99, 235, 0.3); }
-  .primary:hover { filter: brightness(1.08); }
+  .primary { display: inline-flex; align-items: center; gap: 10px; background: var(--act-strong); color: #fff; font-weight: 600; padding: 13px 22px; border-radius: 10px; text-decoration: none; }
+  .primary:hover { background: #2d62d4; }
   .primary svg { width: 18px; height: 18px; }
   .meta { color: var(--faint); font-size: 13px; margin-top: 12px; }
   .meta a { color: var(--muted); }
 
-  .shot { margin: 40px auto 0; max-width: 1080px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line-strong); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5); }
+  .shot { margin: 40px auto 0; max-width: 1080px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line-strong); }
   .shot img { display: block; width: 100%; height: auto; }
 
   section { padding: 56px 0; border-top: 1px solid var(--line); }
-  h2 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h2 { font-size: 24px; margin: 0 0 6px; letter-spacing: -0.02em; }
   .sub { color: var(--muted); margin: 0 0 26px; }
 
   .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
@@ -47,15 +53,17 @@
 
   .platforms { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
   .platform { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
-  .platform.mine { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.14); }
-  .platform h3 { margin: 0 0 4px; display: flex; justify-content: space-between; align-items: baseline; }
-  .platform h3 small { color: var(--teal); font-size: 12px; font-weight: 500; }
+  .platform.mine { border-color: var(--act); }
+  .platform h3 { margin: 0 0 4px; display: flex; gap: 8px; align-items: center; }
+  .platform h3 small { color: var(--act); background: rgba(92, 158, 255, 0.14); font-size: 11.5px; font-weight: 600; padding: 1px 7px; border-radius: 5px; }
   .platform > p { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
   .file { display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px; margin-top: 8px; border-radius: 8px; background: var(--raised); color: var(--fg); text-decoration: none; font-size: 14px; }
-  .file:hover { background: #222b3d; }
+  .file:hover { background: #292a31; }
   .file em { color: var(--faint); font-style: normal; }
   .hint { color: var(--faint); font-size: 13px; }
   .empty { color: var(--faint); }
+  .cmd { margin: 14px 0 0; padding: 10px 12px; background: var(--ink); border: 1px solid var(--line); border-radius: 8px; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all; color: var(--fg); user-select: all; }
+  .cmd-label { margin: 14px 0 -8px; font-size: 12.5px; color: var(--muted); }
 
   .release { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-bottom: 14px; }
   .release header { padding: 0; }
@@ -63,10 +71,9 @@
   .release time { color: var(--faint); font-size: 13px; }
   .notes { white-space: pre-wrap; color: var(--muted); font-size: 14px; margin: 10px 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chips a { font-size: 13px; padding: 5px 10px; border-radius: 999px; background: var(--raised); text-decoration: none; color: var(--muted); }
+  .chips a { font-size: 13px; padding: 5px 10px; border-radius: 6px; background: var(--raised); text-decoration: none; color: var(--muted); }
   .chips a:hover { color: var(--fg); }
 
-  pre { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font-size: 13.5px; }
   footer { color: var(--faint); font-size: 13px; padding: 30px 0 50px; border-top: 1px solid var(--line); }
 
   @media (max-width: 860px) {
@@ -88,8 +95,8 @@
   </header>
 
   <div class="hero">
-    <h1>Your Prisma schema, <span>as a class diagram.</span></h1>
-    <p class="lede">Open a <code>schema.prisma</code> and Prismagram draws every model, enum and relation as a clean UML diagram. Edit and it redraws live. Export to PNG or SVG.</p>
+    <h1>Your Prisma schema as a class diagram.</h1>
+    <p class="lede">Open a <code>schema.prisma</code> and Prismagram draws every model, enum and relation as a UML diagram that redraws as you type. Switch to Data mode to browse and query PostgreSQL, Supabase or MongoDB.</p>
     <a id="cta" class="primary" href="https://github.com/Kingvic300/Prismagram/releases/latest">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>
       <span id="cta-label">Download Prismagram</span>
@@ -101,7 +108,7 @@
 
 <section>
   <div class="wrap facts">
-    <div class="fact"><b>Readable at any size</b><span>Large schemas switch to a tree view: one line per model, the rest on click.</span></div>
+    <div class="fact"><b>Browse your data</b><span>Tables and collections, filters, schema analysis, indexes, and a SQL or aggregation editor.</span></div>
     <div class="fact"><b>Live editing</b><span>Type in the editor or save in your IDE; the diagram follows.</span></div>
     <div class="fact"><b>Export</b><span>Crisp PNG at 2× or a self-contained SVG for docs and slides.</span></div>
     <div class="fact"><b>Updates itself</b><span>New versions download in the background. Restart and you're current.</span></div>
@@ -113,12 +120,13 @@
     <h2>Download</h2>
     <p class="sub" id="version-line">Pick the installer for your computer.</p>
     <div class="platforms">
-      <div class="platform" data-os="linux"><h3>Linux</h3><p>Debian, Ubuntu and Kali, Fedora, or any distribution with the AppImage.</p><div class="files"></div></div>
-      <div class="platform" data-os="mac"><h3>macOS</h3><p>Apple silicon and Intel. macOS 11 or later.</p><div class="files"></div><p class="hint">First launch: right-click Prismagram in Applications and choose Open.</p></div>
-      <div class="platform" data-os="windows"><h3>Windows</h3><p>Windows 10 and 11, 64-bit.</p><div class="files"></div><p class="hint">If SmartScreen warns you, choose More info, then Run anyway.</p></div>
+      <div class="platform" data-os="linux"><h3>Linux</h3><p>Debian, Ubuntu, Kali, Fedora, openSUSE and others, or any distribution with the AppImage.</p><div class="files"></div><p class="cmd-label">Or install from the terminal (any distribution); your package manager then keeps it up to date:</p><pre class="cmd">curl -fsSL https://kingvic300.github.io/Prismagram/install.sh | sudo sh</pre></div>
+      <div class="platform" data-os="mac"><h3>macOS</h3><p>Apple silicon and Intel. macOS 11 or later.</p><div class="files"></div><p class="hint">First launch: right-click Prismagram in Applications and choose Open.</p><p class="cmd-label">Or with Homebrew:</p><pre class="cmd">brew tap kingvic300/prismagram https://github.com/Kingvic300/Prismagram
+brew install --cask prismagram</pre></div>
+      <div class="platform" data-os="windows"><h3>Windows</h3><p>Windows 10 and 11, 64-bit.</p><div class="files"></div><p class="hint">If SmartScreen warns you, choose More info, then Run anyway.</p><p class="cmd-label">Or with Scoop:</p><pre class="cmd">scoop bucket add prismagram https://github.com/Kingvic300/Prismagram
+scoop install prismagram</pre></div>
     </div>
-    <p class="hint" style="margin-top:22px">On Linux, install the <code>.deb</code> with:</p>
-    <pre>sudo apt install ./Prismagram_*_amd64.deb</pre>
+    <p class="hint" style="margin-top:18px">Already installed? Prismagram updates itself: new versions download in the background and you restart when it suits you.</p>
   </div>
 </section>
 
