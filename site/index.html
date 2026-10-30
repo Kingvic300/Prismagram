@@ -69,7 +69,19 @@
   .release header { padding: 0; }
   .release h3 { margin: 0; font-size: 17px; }
   .release time { color: var(--faint); font-size: 13px; }
-  .notes { white-space: pre-wrap; color: var(--muted); font-size: 14px; margin: 10px 0; }
+  .notes { color: var(--muted); font-size: 14px; margin: 10px 0 14px; overflow-wrap: anywhere; }
+  .notes > :first-child { margin-top: 0; }
+  .notes p, .notes ul { margin: 8px 0; }
+  .notes ul { padding-left: 20px; }
+  .notes h4 { margin: 14px 0 6px; font-size: 14px; color: var(--fg); }
+  .notes b { color: var(--fg); }
+  .notes code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--raised); padding: 1px 5px; border-radius: 5px; color: var(--fg); overflow-wrap: anywhere; }
+  .notes .table { overflow-x: auto; margin: 10px 0; border: 1px solid var(--line); border-radius: 10px; }
+  .notes table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .notes th, .notes td { padding: 8px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  .notes th { color: var(--fg); font-weight: 600; background: var(--raised); white-space: nowrap; }
+  .notes tr:last-child td { border-bottom: 0; }
+  .notes td:first-child { white-space: nowrap; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chips a { font-size: 13px; padding: 5px 10px; border-radius: 6px; background: var(--raised); text-decoration: none; color: var(--muted); }
   .chips a:hover { color: var(--fg); }
@@ -160,6 +172,38 @@ scoop install prismagram</pre></div>
   const size = (b) => (b > 1048576 ? (b / 1048576).toFixed(0) + " MB" : Math.ceil(b / 1024) + " KB");
   const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+  // Release notes are Markdown. This covers what they use: headings, paragraphs, lists, tables,
+  // **bold**, `code` and [links](https://...). Text is escaped first, so notes can't inject HTML.
+  function inline(text) {
+    const codes = [];
+    return esc(text)
+      .replace(/`([^`]+)`/g, (_, c) => `\u0000${codes.push(c) - 1}\u0000`)
+      .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>')
+      .replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${codes[i]}</code>`);
+  }
+  function markdown(source) {
+    const cells = (line) => line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+    return source
+      .replace(/\r/g, "")
+      .trim()
+      .split(/\n{2,}/)
+      .map((block) => {
+        const lines = block.split("\n");
+        const heading = block.match(/^#{1,6}\s+(.*)$/);
+        if (heading && lines.length === 1) return `<h4>${inline(heading[1])}</h4>`;
+        if (lines.length > 1 && lines.every((l) => l.trim().startsWith("|")) && /^[\s|:-]+$/.test(lines[1])) {
+          const [head, , ...rows] = lines;
+          return `<div class="table"><table><thead><tr>${cells(head).map((c) => `<th>${inline(c)}</th>`).join("")}</tr></thead><tbody>${rows
+            .map((r) => `<tr>${cells(r).map((c) => `<td>${inline(c)}</td>`).join("")}</tr>`)
+            .join("")}</tbody></table></div>`;
+        }
+        if (lines.every((l) => /^\s*[-*]\s+/.test(l))) return `<ul>${lines.map((l) => `<li>${inline(l.replace(/^\s*[-*]\s+/, ""))}</li>`).join("")}</ul>`;
+        return `<p>${lines.map(inline).join("<br>")}</p>`;
+      })
+      .join("");
+  }
+
   if (os) {
     document.querySelector(`.platform[data-os="${os}"]`).classList.add("mine");
     document.querySelector(`.platform[data-os="${os}"] h3`).insertAdjacentHTML("beforeend", "<small>Your system</small>");
@@ -196,7 +240,7 @@ scoop install prismagram</pre></div>
           const files = r.assets.map((a) => ({ a, c: classify(a.name) })).filter((x) => x.c);
           return `<article class="release">
             <header><h3>${esc(r.name || r.tag_name)}</h3><time datetime="${r.published_at}">${new Date(r.published_at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}</time></header>
-            ${r.body ? `<div class="notes">${esc(r.body.trim())}</div>` : ""}
+            ${r.body ? `<div class="notes">${markdown(r.body)}</div>` : ""}
             <div class="chips">${files.map(({ a, c }) => `<a href="${a.browser_download_url}">${LABEL[c.os]}: ${esc(c.label)}</a>`).join("")}<a href="${r.html_url}">All files</a></div>
           </article>`;
         })
