@@ -171,6 +171,10 @@
             <span id="appVersion" class="version"></span>
           </div>
           <p class="update-status" id="updateStatus" hidden></p>
+          <div class="update-row">
+            <button class="btn danger" id="btnClearData">Clear all data</button>
+          </div>
+          <p class="update-status">Closes open connections and removes saved connections, their passwords and your settings. Your files are not touched.</p>
         </aside>
 
         <div class="tooltip" id="tooltip" hidden></div>
@@ -184,7 +188,10 @@
       <aside class="db-sidebar">
         <div class="db-side-head">
           <span>Connections <b id="dbConnCount">0</b></span>
-          <button class="icon-btn" id="dbAddConnection" title="New connection"><svg viewBox="0 0 24 24" class="ico"><path d="M12 5v14 M5 12h14" /></svg></button>
+          <span class="db-side-actions">
+            <button class="icon-btn danger" id="dbClearData" title="Clear all data"><svg viewBox="0 0 24 24" class="ico"><path d="M4 7h16 M10 11v6 M14 11v6 M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12 M9 7V4h6v3" /></svg></button>
+            <button class="icon-btn" id="dbAddConnection" title="New connection"><svg viewBox="0 0 24 24" class="ico"><path d="M12 5v14 M5 12h14" /></svg></button>
+          </span>
         </div>
         <div class="db-side-search">
           <svg viewBox="0 0 24 24" class="ico"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
@@ -250,9 +257,11 @@
       </form>
     </dialog>
 
+    <dialog class="dialog action-dialog" id="actionDialog"></dialog>
+
     <dialog class="dialog" id="connDialog">
       <form id="connForm">
-        <h2>New connection</h2>
+        <h2 id="connTitle">New connection</h2>
         <p class="hint">PostgreSQL, Supabase and MongoDB (including Atlas). The connection stays open until you disconnect it.</p>
 
         <label class="field-label" for="connName">Name</label>
@@ -272,7 +281,8 @@
         <p class="dialog-error" id="connError" role="alert" hidden></p>
 
         <div class="dialog-actions">
-          <span class="note">Passwords are never saved.</span>
+          <span class="note">Saved in your system keychain.</span>
+          <button type="button" class="btn ghost" id="connCopy" hidden>Copy connection string</button>
           <button type="button" class="btn" id="connCancel">Cancel</button>
           <button type="submit" class="btn primary" id="connSubmit">Connect</button>
         </div>

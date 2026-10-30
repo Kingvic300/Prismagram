@@ -1,10 +1,22 @@
 // The Data mode: a database browser in the style of MongoDB Compass. Rust keeps the live
 // connections (client.rs); this module draws the sidebar of connections, databases and
 // tables, the tabs, and the Documents / Schema / Indexes / Query views of each tab.
-// Connection strings are remembered without their passwords, like the Supabase import.
+// Saved connections are listed from local storage without their passwords; the full connection
+// string and password are kept in the system keychain (secrets.rs) and read back to reconnect.
 
 import { inferSchema, parseShell, scalarText, toCSV, toShell, typeOf } from "./values.js";
-import { withoutPassword } from "./database.js";
+import { withPassword, withoutPassword } from "./database.js";
+import {
+  createIndexSql,
+  deleteSql,
+  deleteWhereSql,
+  dropIndexSql,
+  insertSql,
+  mongoCall,
+  rowTemplate,
+  updateSql,
+  updateWhereSql,
+} from "./writes.js";
 
 const SAVED_KEY = "prismagram.connections";
 const MAX_SAVED = 12;
@@ -16,6 +28,8 @@ const STRING_PREVIEW = 2000;
 const ITEMS_SHOWN = 200;
 const PAGE_SIZES = [20, 50, 100];
 const SAMPLE_SIZE = 200;
+/** How often the open tab and the sidebar counts are read again. */
+const LIVE_MS = 1000;
 const PLACEHOLDER = /\[YOUR-PASSWORD\]|<db_password>|<password>/;
 
 const ICONS = {
@@ -35,6 +49,10 @@ const ICONS = {
   json: '<svg viewBox="0 0 24 24" class="ico"><path d="M8 4c-2 0-3 1-3 3v2c0 1.5-1 3-2 3 1 0 2 1.5 2 3v2c0 2 1 3 3 3 M16 4c2 0 3 1 3 3v2c0 1.5 1 3 2 3-1 0-2 1.5-2 3v2c0 2-1 3-3 3" /></svg>',
   table: '<svg viewBox="0 0 24 24" class="ico"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18 M3 15h18 M9 4v16" /></svg>',
   close: '<svg viewBox="0 0 24 24" class="ico"><path d="M7 7l10 10 M17 7L7 17" /></svg>',
+  edit: '<svg viewBox="0 0 24 24" class="ico"><path d="M4 20h4L19 9l-4-4L4 16z M14 6l4 4" /></svg>',
+  clone: '<svg viewBox="0 0 24 24" class="ico"><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2 M14 11v6 M11 14h6" /></svg>',
+  trash: '<svg viewBox="0 0 24 24" class="ico"><path d="M4 7h16 M10 11v6 M14 11v6 M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12 M9 7V4h6v3" /></svg>',
+  plus: '<svg viewBox="0 0 24 24" class="ico"><path d="M12 5v14 M5 12h14" /></svg>',
 };
 
 export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onStatus }) {
@@ -98,8 +116,13 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
         expanded: new Set(result.defaultDatabase ? [result.defaultDatabase] : []),
       };
       live.set(key, conn);
+      const before = saved;
       saved = [{ url: key, name, kind: result.kind }, ...saved.filter((s) => s.url !== key)].slice(0, MAX_SAVED);
       storeSaved();
+      before.filter((s) => !saved.some((k) => k.url === s.url)).forEach(forgetSecret);
+      invoke("secret_save", { account: key, url, password }).catch((err) =>
+        toast(`Connected, but the password could not be saved, so you'll type it again next time. ${err}`, true),
+      );
       // Tabs left from an earlier session of this connection use the new id.
       tabs.filter((t) => t.conn === key).forEach((t) => fetchActive(t));
       if (result.kind === "mongodb" && result.defaultDatabase) await loadCollections(conn, result.defaultDatabase);
@@ -160,12 +183,19 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
   const passwordInput = $("connPassword");
   const dialogError = $("connError");
   const submit = $("connSubmit");
+  const copyButton = $("connCopy");
   let attempt = 0;
+  /** While editing: the saved entry and what the keychain held for it. Null for a new connection. */
+  let editing = null;
 
-  function openDialog(url = "", error = "", name = "") {
+  function openDialog(url = "", error = "", name = "", password = "", edit = null) {
+    editing = edit;
+    $("connTitle").textContent = edit ? "Edit connection" : "New connection";
+    copyButton.hidden = !edit;
+    copyButton.textContent = "Copy connection string";
     nameInput.value = name;
     urlInput.value = url;
-    passwordInput.value = "";
+    passwordInput.value = password;
     dialogError.textContent = error;
     dialogError.hidden = !error;
     setBusy(false);
@@ -175,8 +205,44 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
 
   function setBusy(busy) {
     [nameInput, urlInput, passwordInput, submit].forEach((el) => (el.disabled = busy));
-    submit.textContent = busy ? "Connecting…" : "Connect";
+    submit.textContent = busy ? (editing ? "Saving…" : "Connecting…") : editing ? "Save" : "Connect";
   }
+
+  async function editConnection(entry) {
+    const secret = await invoke("secret_load", { account: entry.url }).catch(() => null);
+    openDialog(secret?.url ?? entry.url, "", entry.name, secret?.password ?? "", { entry, secret });
+  }
+
+  /** A new name alone is saved as is; a new string or password is tried first, then replaces the old. */
+  async function saveEdit({ entry, secret }, name, url, password) {
+    name = name.trim();
+    if (url === (secret?.url ?? entry.url) && password === (secret?.password ?? "")) {
+      entry.name = name;
+      const conn = live.get(entry.url);
+      if (conn) conn.name = name;
+      storeSaved();
+      renderAll();
+      return toast(`Saved ${name}`);
+    }
+    const conn = await connect(url, password, name);
+    if (conn.key !== entry.url) {
+      if (live.has(entry.url)) await disconnect(entry.url);
+      saved = saved.filter((s) => s.url !== entry.url);
+      storeSaved();
+      forgetSecret(entry);
+      renderAll();
+    }
+  }
+
+  copyButton.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(withPassword(urlInput.value, passwordInput.value));
+      copyButton.textContent = "Copied";
+    } catch (err) {
+      copyButton.textContent = "Couldn't copy";
+    }
+    setTimeout(() => (copyButton.textContent = "Copy connection string"), 1500);
+  });
 
   dialog.querySelector("form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -192,7 +258,8 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     }
     setBusy(true);
     try {
-      await connect(urlInput.value, passwordInput.value, nameInput.value);
+      if (editing) await saveEdit(editing, nameInput.value, urlInput.value, passwordInput.value);
+      else await connect(urlInput.value, passwordInput.value, nameInput.value);
       if (current !== attempt) return;
       dialog.close();
     } catch (err) {
@@ -209,10 +276,15 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
   dialog.addEventListener("cancel", () => attempt++);
 
   /** Reconnects a remembered connection, asking for the password when the string needs one. */
+  function forgetSecret(entry) {
+    return invoke("secret_forget", { account: entry.url }).catch(() => {});
+  }
+
   async function reconnect(entry) {
-    if (PLACEHOLDER.test(entry.url)) return openDialog(entry.url, "", entry.name);
+    const secret = await invoke("secret_load", { account: entry.url }).catch(() => null);
+    if (!secret && PLACEHOLDER.test(entry.url)) return openDialog(entry.url, "", entry.name);
     try {
-      await connect(entry.url, "", entry.name);
+      await connect(secret?.url ?? entry.url, secret?.password ?? "", entry.name);
     } catch (err) {
       openDialog(entry.url, String(err), entry.name);
     }
@@ -232,9 +304,14 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
           ? [
               iconButton("new-query", ICONS.query, conn.kind === "mongodb" ? "New aggregation" : "New SQL query"),
               iconButton("refresh", ICONS.refresh, "Refresh"),
+              iconButton("edit-conn", ICONS.edit, "Edit connection"),
               iconButton("disconnect", ICONS.unplug, "Disconnect"),
             ]
-          : [iconButton("connect", ICONS.plug, "Connect"), iconButton("forget", ICONS.close, "Forget this connection")];
+          : [
+              iconButton("connect", ICONS.plug, "Connect"),
+              iconButton("edit-conn", ICONS.edit, "Edit connection"),
+              iconButton("forget", ICONS.close, "Forget this connection"),
+            ];
         let html = `<div class="conn${conn ? " on" : ""}" data-c="${i}">
           <div class="tree-row conn-row" data-act="${conn ? "toggle-conn" : "connect"}" title="${esc(entry.url)}">
             ${conn ? `<span class="caret${conn.open ? " open" : ""}">${ICONS.caret}</span>` : '<span class="caret"></span>'}
@@ -307,7 +384,10 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     switch (el.dataset.act) {
       case "connect":
         return reconnect(entry);
+      case "edit-conn":
+        return editConnection(entry);
       case "forget":
+        forgetSecret(entry);
         saved = saved.filter((s) => s !== entry);
         storeSaved();
         return renderTree();
@@ -501,6 +581,11 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
           </div>
         </form>
         <div class="doc-toolbar">
+          ${
+            writable(tab)
+              ? `<button class="btn primary small" data-act="insert">${ICONS.plus} ${pg ? "Insert row" : "Insert document"}</button>`
+              : ""
+          }
           <div class="menu-wrap">
             <button class="btn small" data-act="export-menu">${ICONS.copy} Export</button>
             <div class="menu" hidden>
@@ -509,11 +594,18 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
               <button data-export="csv">Save page as CSV <small>.csv</small></button>
             </div>
           </div>
+          ${
+            writable(tab)
+              ? `<button class="btn small" data-act="update-many" title="Change everything that matches the filter">${ICONS.edit} Update</button>
+                 <button class="btn small danger" data-act="delete-many" title="Delete everything that matches the filter">${ICONS.trash} Delete</button>`
+              : ""
+          }
           <div class="spacer"></div>
           <select class="input small-select" data-act="limit" title="Rows per page">
             ${PAGE_SIZES.map((n) => `<option value="${n}"${n === tab.limit ? " selected" : ""}>${n}</option>`).join("")}
           </select>
           <span class="range" data-range></span>
+          <button class="btn ghost small live-toggle${autoRefresh ? " on" : ""}" data-act="live" title="Read the data again every second">Live</button>
           ${iconButton("refresh-docs", ICONS.refresh, "Refresh")}
           ${iconButton("prev", ICONS.prev, "Previous page")}
           ${iconButton("next", ICONS.next, "Next page")}
@@ -586,24 +678,29 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     }
   }
 
+  /** `applied` is the filter, sort and projection the page was asked for. */
+  function findRequest(tab, conn, applied) {
+    const mongo = conn.kind === "mongodb";
+    return {
+      database: tab.db,
+      collection: tab.coll,
+      filter: mongo ? shellJSON(applied.filter, "Filter") : applied.filter,
+      sort: mongo ? shellJSON(applied.sort, "Sort") : applied.sort,
+      project: mongo ? shellJSON(applied.project, "Project") : "",
+      skip: tab.skip,
+      limit: tab.limit,
+    };
+  }
+
   function fetchDocuments(tab) {
+    const applied = { filter: tab.filter, sort: tab.sort, project: tab.project };
     return load(
       tab,
-      (conn) => {
-        const mongo = conn.kind === "mongodb";
-        const request = {
-          database: tab.db,
-          collection: tab.coll,
-          filter: mongo ? shellJSON(tab.filter, "Filter") : tab.filter,
-          sort: mongo ? shellJSON(tab.sort, "Sort") : tab.sort,
-          project: mongo ? shellJSON(tab.project, "Project") : "",
-          skip: tab.skip,
-          limit: tab.limit,
-        };
-        return invoke("client_find", { id: conn.id, request });
-      },
+      (conn) => invoke("client_find", { id: conn.id, request: findRequest(tab, conn, applied) }),
       (page) => {
         tab.page = page;
+        tab.applied = applied;
+        tab.pageFilter = applied.filter;
         tab.moreFields = new Set();
       },
     );
@@ -687,7 +784,7 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     box.classList.toggle("loading", tab.loading);
     if (!rows.length) return (box.innerHTML = `<div class="db-message">${tab.filter ? "No rows match this filter." : "This is empty."}</div>`);
     const types = columnTypes(page);
-    if (tab.layout === "table") box.innerHTML = tableHtml(rows, page.columns, types, tab.skip);
+    if (tab.layout === "table") box.innerHTML = tableHtml(rows, page.columns, types, tab.skip, writable(tab));
     else if (tab.layout === "json") box.innerHTML = rows.map((r, i) => jsonCard(r, i)).join("");
     else box.innerHTML = rows.map((r, i) => docCard(r, i, types, tab.moreFields)).join("");
   }
@@ -718,7 +815,7 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     const shown = all ? entries : entries.slice(0, FIELDS_SHOWN);
     const hidden = entries.length - shown.length;
     return `<div class="doc-card" data-row="${i}" data-src="${src}">
-      <div class="doc-actions">${iconButton("copy-doc", ICONS.copy, "Copy as JSON")}</div>
+      ${docActions(src)}
       ${shown.map(([k, v]) => fieldHtml(k, v, [i, k], types.get(k))).join("")}
       ${hidden > 0 ? `<button class="more-fields" data-act="more-fields">▾ Show ${hidden} more field${hidden === 1 ? "" : "s"}</button>` : ""}
       ${all && entries.length > FIELDS_SHOWN ? `<button class="more-fields" data-act="fewer-fields">▴ Show fewer fields</button>` : ""}
@@ -792,12 +889,21 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
 
   function jsonCard(row, i, src = "page") {
     return `<div class="doc-card json" data-row="${i}" data-src="${src}">
-      <div class="doc-actions">${iconButton("copy-doc", ICONS.copy, "Copy as JSON")}</div>
+      ${docActions(src)}
       <pre>${esc(toShell(row))}</pre>
     </div>`;
   }
 
-  function tableHtml(rows, columns, types, offset) {
+  function docActions(src) {
+    const write = src === "page" && writable(activeTab());
+    return `<div class="doc-actions">${
+      write ? iconButton("edit-doc", ICONS.edit, "Edit") : ""
+    }${iconButton("copy-doc", ICONS.copy, "Copy as JSON")}${
+      write ? iconButton("clone-doc", ICONS.clone, "Clone") + iconButton("delete-doc", ICONS.trash, "Delete") : ""
+    }</div>`;
+  }
+
+  function tableHtml(rows, columns, types, offset, write = false) {
     const names = columns?.length ? columns.map((c) => c.name) : [...new Set(rows.flatMap((r) => Object.keys(r)))];
     const head = names
       .map((n) => `<th>${esc(n)}${types.get(n) ? `<small>${esc(types.get(n))}</small>` : ""}</th>`)
@@ -805,12 +911,14 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     const body = rows
       .map(
         (r, i) =>
-          `<tr><td class="rownum">${offset + i + 1}</td>${names
+          `<tr data-row="${i}" data-src="page">${
+            write ? `<td class="row-acts">${iconButton("edit-doc", ICONS.edit, "Edit")}${iconButton("delete-doc", ICONS.trash, "Delete")}</td>` : ""
+          }<td class="rownum">${offset + i + 1}</td>${names
             .map((n) => `<td>${n in r ? valueHtml(r[n], types.get(n), true) : '<span class="v muted">—</span>'}</td>`)
             .join("")}</tr>`,
       )
       .join("");
-    return `<div class="grid-wrap"><table class="grid"><thead><tr><th class="rownum">#</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+    return `<div class="grid-wrap"><table class="grid"><thead><tr>${write ? '<th class="row-acts"></th>' : ""}<th class="rownum">#</th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
   }
 
   function rowsOf(tab, src) {
@@ -861,14 +969,17 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     const box = results();
     if (tab.error) return (box.innerHTML = errorHtml(tab.error));
     if (!tab.indexes) return (box.innerHTML = skeletonHtml("table", 3));
-    if (!tab.indexes.length) return (box.innerHTML = `<div class="db-message">No indexes.</div>`);
-    box.innerHTML = `<table class="grid info"><thead><tr><th>Name</th><th>Definition</th><th>Properties</th><th>Size</th></tr></thead><tbody>${tab.indexes
+    const write = writable(tab);
+    const head = write ? `<div class="schema-head"><button class="btn primary small" data-act="create-index">${ICONS.plus} Create index</button></div>` : "";
+    if (!tab.indexes.length) return (box.innerHTML = `${head}<div class="db-message">No indexes.</div>`);
+    box.innerHTML = `${head}<table class="grid info"><thead><tr><th>Name</th><th>Definition</th><th>Properties</th><th>Size</th>${write ? "<th></th>" : ""}</tr></thead><tbody>${tab.indexes
       .map(
         (ix) => `<tr>
           <td><b>${esc(ix.name)}</b></td>
           <td class="mono">${esc(ix.definition)}</td>
           <td>${ix.primary ? '<span class="tag pk">primary</span>' : ""}${ix.unique && !ix.primary ? '<span class="tag">unique</span>' : ""}</td>
           <td class="muted">${esc(ix.size || "")}</td>
+          ${write ? `<td class="row-end">${ix.primary ? "" : `<button class="icon-btn danger" data-act="drop-index" data-index="${esc(ix.name)}" title="Drop index">${ICONS.trash}</button>`}</td>` : ""}
         </tr>`,
       )
       .join("")}</tbody></table>`;
@@ -1034,21 +1145,458 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
       }
       case "expand": {
         const kv = el.closest(".kv");
-        const kids = kv.querySelector(":scope > .kids");
-        if (!kids.childElementCount) {
-          const path = JSON.parse(kv.dataset.path);
-          let value = rowsOf(tab, card.dataset.src)[path[0]];
-          for (const key of path.slice(1)) value = value?.[key];
-          kids.innerHTML = childrenHtml(value, path);
-        }
+        fillKids(tab, kv, card.dataset.src);
         kv.classList.toggle("open");
         return;
       }
+      case "live":
+        autoRefresh = !autoRefresh;
+        view.querySelectorAll(".live-toggle").forEach((b) => b.classList.toggle("on", autoRefresh));
+        return;
       case "wrap":
         if (!window.getSelection()?.toString()) el.classList.toggle("wrap");
         return;
+      case "insert":
+      case "update-many":
+      case "delete-many":
+      case "create-index":
+        readForm(tab);
+        return startWrite(tab, el.dataset.act).catch((err) => toast(String(err?.message || err), true));
+      case "edit-doc":
+      case "clone-doc":
+      case "delete-doc":
+        return startWrite(tab, el.dataset.act, rowsOf(tab, "page")[Number(card.dataset.row)]).catch((err) => toast(String(err?.message || err), true));
+      case "drop-index":
+        return startWrite(tab, "drop-index", el.dataset.index).catch((err) => toast(String(err?.message || err), true));
     }
   });
+
+  // ------------------------------------------------------------ writes
+  // Every change goes through one dialog that shows the SQL or mongosh call before it runs.
+  // PostgreSQL rows are changed with SQL through client_sql; MongoDB through client_write.
+
+  const actionDialog = $("actionDialog");
+
+  function writable(tab) {
+    return Boolean(tab?.coll) && ["table", "collection", "timeseries"].includes(tab.kind);
+  }
+
+  /**
+   * `text` (null for none) is edited in a textarea, `index` adds the unique and name fields.
+   * `preview(values)` returns what will run; `submit(values)` runs it and returns the toast.
+   */
+  function openAction({ title, hint = "", text = null, index = false, label, danger = false, preview, submit }) {
+    actionDialog.innerHTML = `<form>
+      <h2>${esc(title)}</h2>
+      ${hint ? `<p class="hint">${hint}</p>` : ""}
+      ${text !== null ? `<textarea class="input mono action-text" name="text" spellcheck="false" autocapitalize="off" autocomplete="off">${esc(text)}</textarea>` : ""}
+      ${
+        index
+          ? `<div class="action-options"><label class="toggle"><input type="checkbox" name="unique" /> Unique</label>
+              <input class="input" name="indexName" placeholder="Name (optional)" autocomplete="off" spellcheck="false" /></div>`
+          : ""
+      }
+      <span class="field-label">Runs</span>
+      <pre class="run-preview" data-preview></pre>
+      <p class="dialog-error" data-error role="alert" hidden></p>
+      <div class="dialog-actions">
+        <span class="note"></span>
+        <button type="button" class="btn" data-cancel>Cancel</button>
+        <button type="submit" class="btn ${danger ? "destructive" : "primary"}" data-submit>${esc(label)}</button>
+      </div>
+    </form>`;
+    const form = actionDialog.querySelector("form");
+    const field = (name) => form.elements.namedItem(name);
+    const values = () => ({ text: field("text")?.value ?? "", unique: field("unique")?.checked ?? false, name: field("indexName")?.value ?? "" });
+    const previewEl = form.querySelector("[data-preview]");
+    const errorEl = form.querySelector("[data-error]");
+    const submitBtn = form.querySelector("[data-submit]");
+    const update = () => {
+      try {
+        previewEl.textContent = preview(values());
+        previewEl.classList.remove("invalid");
+      } catch (err) {
+        previewEl.textContent = String(err?.message || err);
+        previewEl.classList.add("invalid");
+      }
+    };
+    form.addEventListener("input", update);
+    form.querySelector("[data-cancel]").addEventListener("click", () => actionDialog.close());
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorEl.hidden = true;
+      submitBtn.disabled = true;
+      try {
+        const message = await submit(values());
+        actionDialog.close();
+        toast(message);
+      } catch (err) {
+        errorEl.textContent = String(err?.message || err);
+        errorEl.hidden = false;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+    update();
+    actionDialog.showModal();
+    (field("text") || submitBtn).focus();
+  }
+
+  async function startWrite(tab, act, target) {
+    if (isPostgres(tab)) return startSqlWrite(tab, act, target);
+    const coll = tab.coll;
+    const filter = parseShell(tab.filter) ?? {};
+    const docs = (n) => `${n.toLocaleString()} document${n === 1 ? "" : "s"}`;
+    const write = (op) => invoke("client_write", { id: connOf(tab).id, database: tab.db, collection: coll, write: op });
+    const id = () => {
+      if (target?._id === undefined) throw new Error("This document has no _id, so it can't be picked out.");
+      return { _id: target._id };
+    };
+    const insert = (title, start) =>
+      openAction({
+        title,
+        hint: "One document, or an array of documents to insert several.",
+        text: start,
+        label: "Insert",
+        preview: ({ text }) => {
+          const value = parseShell(text) ?? {};
+          return mongoCall(coll, Array.isArray(value) ? "insertMany" : "insertOne", value);
+        },
+        submit: async ({ text }) => {
+          const r = await write({ op: "insertOne", document: shellJSON(text, "Document") || "{}" });
+          afterWrite(tab);
+          return `Inserted ${docs(r.count)}`;
+        },
+      });
+    switch (act) {
+      case "insert":
+        return insert("Insert document", "{\n  \n}");
+      case "clone-doc": {
+        const { _id, ...copy } = target;
+        return insert("Clone document", toShell(copy));
+      }
+      case "edit-doc":
+        return openAction({
+          title: "Edit document",
+          text: toShell(target),
+          label: "Replace",
+          preview: ({ text }) => mongoCall(coll, "replaceOne", id(), parseShell(text) ?? {}),
+          submit: async ({ text }) => {
+            const r = await write({ op: "replaceOne", filter: JSON.stringify(id()), document: shellJSON(text, "Document") || "{}" });
+            if (!r.count) throw new Error("No document matched. It may have been deleted; refresh and try again.");
+            afterWrite(tab);
+            return "Document replaced";
+          },
+        });
+      case "delete-doc":
+        return openAction({
+          title: "Delete document",
+          hint: "This can't be undone.",
+          label: "Delete",
+          danger: true,
+          preview: () => mongoCall(coll, "deleteOne", id()),
+          submit: async () => {
+            const r = await write({ op: "deleteOne", filter: JSON.stringify(id()) });
+            afterWrite(tab);
+            return r.count ? "Document deleted" : "Nothing deleted: the document was already gone";
+          },
+        });
+      case "update-many":
+        return openAction({
+          title: "Update documents",
+          hint: `Applies to ${matching(tab, "document")}. Use update operators like <code>$set</code>, or a pipeline array.`,
+          text: "{\n  $set: {\n    \n  }\n}",
+          label: "Update",
+          preview: ({ text }) => mongoCall(coll, "updateMany", filter, parseShell(text) ?? {}),
+          submit: async ({ text }) => {
+            const r = await write({ op: "updateMany", filter: JSON.stringify(filter), update: shellJSON(text, "Update") || "{}" });
+            afterWrite(tab);
+            return `Updated ${docs(r.count)}`;
+          },
+        });
+      case "delete-many":
+        return openAction({
+          title: "Delete documents",
+          hint: `Deletes ${matching(tab, "document")}. This can't be undone.`,
+          label: "Delete",
+          danger: true,
+          preview: () => mongoCall(coll, "deleteMany", filter),
+          submit: async () => {
+            const r = await write({ op: "deleteMany", filter: JSON.stringify(filter) });
+            afterWrite(tab);
+            return `Deleted ${docs(r.count)}`;
+          },
+        });
+      case "create-index":
+        return openAction({
+          title: "Create index",
+          hint: "The fields to index: 1 for ascending, -1 for descending, or \"text\".",
+          text: "{ field: 1 }",
+          index: true,
+          label: "Create",
+          preview: ({ text, unique, name }) => {
+            const options = { ...(unique ? { unique: true } : {}), ...(name.trim() ? { name: name.trim() } : {}) };
+            return mongoCall(coll, "createIndex", parseShell(text) ?? {}, ...(Object.keys(options).length ? [options] : []));
+          },
+          submit: async ({ text, unique, name }) => {
+            await write({ op: "createIndex", keys: shellJSON(text, "Index keys") || "{}", unique, name });
+            afterWrite(tab, true);
+            return "Index created";
+          },
+        });
+      case "drop-index":
+        return openAction({
+          title: "Drop index",
+          hint: `Queries that use <b>${esc(target)}</b> get slower.`,
+          label: "Drop",
+          danger: true,
+          preview: () => mongoCall(coll, "dropIndex", target),
+          submit: async () => {
+            await write({ op: "dropIndex", name: target });
+            afterWrite(tab, true);
+            return `Dropped ${target}`;
+          },
+        });
+    }
+  }
+
+  async function startSqlWrite(tab, act, target) {
+    const conn = connOf(tab);
+    if (!tab.fields) tab.fields = await invoke("client_columns", { id: conn.id, database: tab.db, collection: tab.coll });
+    const key = tab.fields.filter((f) => f.primary).map((f) => f.name);
+    const types = columnTypes(tab.page || {});
+    const [schema, table] = [tab.db, tab.coll];
+    const rows = (n) => `${n.toLocaleString()} row${n === 1 ? "" : "s"}`;
+    const json = (text) => {
+      try {
+        return JSON.parse(text);
+      } catch (err) {
+        throw new Error(`Not valid JSON: ${err.message}`);
+      }
+    };
+    const run = async (sql) => {
+      const r = await invoke("client_sql", { id: conn.id, database: schema, sql });
+      return r.results.reduce((n, set) => n + set.count, 0);
+    };
+    const insert = (title, start) =>
+      openAction({
+        title,
+        hint: "A row as JSON, with column names as keys. Columns left out get their defaults. An array inserts several rows.",
+        text: JSON.stringify(start, null, 2),
+        label: "Insert",
+        preview: ({ text }) => insertSql(schema, table, json(text), types),
+        submit: async ({ text }) => {
+          const n = await run(insertSql(schema, table, json(text), types));
+          afterWrite(tab);
+          return `Inserted ${rows(n)}`;
+        },
+      });
+    switch (act) {
+      case "insert":
+        return insert("Insert row", rowTemplate(tab.fields));
+      case "clone-doc": {
+        // Keys filled in by the database (serial, uuid) start fresh in the copy.
+        const generated = new Set(tab.fields.filter((f) => f.primary && f.default).map((f) => f.name));
+        return insert("Clone row", Object.fromEntries(Object.entries(target).filter(([k]) => !generated.has(k))));
+      }
+      case "edit-doc":
+        return openAction({
+          title: "Edit row",
+          hint: "Change the values; only the columns you change are updated.",
+          text: JSON.stringify(target, null, 2),
+          label: "Update",
+          preview: ({ text }) => updateSql(schema, table, target, json(text), key, types) ?? "-- Nothing changed yet",
+          submit: async ({ text }) => {
+            const sql = updateSql(schema, table, target, json(text), key, types);
+            if (!sql) throw new Error("Nothing changed.");
+            if (!(await run(sql))) throw new Error("No row matched. It may have been changed or deleted; refresh and try again.");
+            afterWrite(tab);
+            return "Row updated";
+          },
+        });
+      case "delete-doc":
+        return openAction({
+          title: "Delete row",
+          hint: "This can't be undone.",
+          label: "Delete",
+          danger: true,
+          preview: () => deleteSql(schema, table, target, key, types),
+          submit: async () => {
+            const n = await run(deleteSql(schema, table, target, key, types));
+            afterWrite(tab);
+            return n ? "Row deleted" : "Nothing deleted: the row was already gone";
+          },
+        });
+      case "update-many":
+        return openAction({
+          title: "Update rows",
+          hint: `Applies to ${matching(tab, "row")}. Type the SET part, like <code>status = 'done', updated_at = now()</code>.`,
+          text: "",
+          label: "Update",
+          preview: ({ text }) => updateWhereSql(schema, table, text, tab.filter),
+          submit: async ({ text }) => {
+            const n = await run(updateWhereSql(schema, table, text, tab.filter));
+            afterWrite(tab);
+            return `Updated ${rows(n)}`;
+          },
+        });
+      case "delete-many":
+        return openAction({
+          title: "Delete rows",
+          hint: `Deletes ${matching(tab, "row")}. This can't be undone.`,
+          label: "Delete",
+          danger: true,
+          preview: () => deleteWhereSql(schema, table, tab.filter),
+          submit: async () => {
+            const n = await run(deleteWhereSql(schema, table, tab.filter));
+            afterWrite(tab);
+            return `Deleted ${rows(n)}`;
+          },
+        });
+      case "create-index":
+        return openAction({
+          title: "Create index",
+          hint: "The columns or expressions to index, like <code>email</code> or <code>lower(email), created_at desc</code>.",
+          text: "",
+          index: true,
+          label: "Create",
+          preview: ({ text, unique, name }) => createIndexSql(schema, table, text, unique, name),
+          submit: async ({ text, unique, name }) => {
+            await run(createIndexSql(schema, table, text, unique, name));
+            afterWrite(tab, true);
+            return "Index created";
+          },
+        });
+      case "drop-index":
+        return openAction({
+          title: "Drop index",
+          hint: `Queries that use <b>${esc(target)}</b> get slower.`,
+          label: "Drop",
+          danger: true,
+          preview: () => dropIndexSql(schema, target),
+          submit: async () => {
+            await run(dropIndexSql(schema, target));
+            afterWrite(tab, true);
+            return `Dropped ${target}`;
+          },
+        });
+    }
+  }
+
+  /** "the 12 rows that match the filter", or "every row in the table" with no filter. */
+  function matching(tab, noun) {
+    const filtered = Boolean(tab.filter.trim());
+    const total = tab.pageFilter === tab.filter ? tab.page?.total : null;
+    const where = isPostgres(tab) ? "table" : "collection";
+    if (total === null || total === undefined) return filtered ? `every ${noun} that matches the filter` : `every ${noun} in the ${where}`;
+    const count = `${tab.page.estimated ? "about " : ""}${total.toLocaleString()} ${noun}${total === 1 ? "" : "s"}`;
+    return filtered ? `the ${count} that match the filter` : `all ${count} in the ${where}`;
+  }
+
+  /** Reloads what a write changed: the page or the indexes, and the sidebar's row counts. */
+  function afterWrite(tab, indexes = false) {
+    if (indexes) fetchIndexes(tab);
+    else fetchDocuments(tab);
+    const conn = connOf(tab);
+    if (conn?.kind === "postgres") loadCollections(conn, tab.db);
+  }
+
+  /** Draws a nested field's children the first time it is opened. */
+  function fillKids(tab, kv, src) {
+    const kids = kv.querySelector(":scope > .kids");
+    if (kids.childElementCount) return;
+    const path = JSON.parse(kv.dataset.path);
+    let value = rowsOf(tab, src)[path[0]];
+    for (const key of path.slice(1)) value = value?.[key];
+    if (value !== undefined) kids.innerHTML = childrenHtml(value, path);
+  }
+
+  // ------------------------------------------------------------ live refresh
+  // Every LIVE_MS the open tab's rows (or indexes) and the sidebar's counts are read again and
+  // redrawn only when they changed, keeping the scroll position and the opened fields. A poll
+  // is skipped while the last one is still running, while the window is hidden or in Diagram
+  // mode, and while a dialog is open, so an edit never targets a row that just moved. The SQL
+  // and Aggregations tabs are never re-run: their statements can change data.
+
+  let autoRefresh = true;
+  let polling = false;
+
+  setInterval(async () => {
+    if (!autoRefresh || polling || document.hidden || !document.body.classList.contains("mode-data")) return;
+    if (document.querySelector("dialog[open]")) return;
+    polling = true;
+    try {
+      await Promise.all([pollTab(activeTab()), pollTree()]);
+    } finally {
+      polling = false;
+    }
+  }, LIVE_MS);
+
+  async function pollTab(tab) {
+    const conn = tab && connOf(tab);
+    if (!conn || tab.loading || tab.error) return;
+    const seq = tab.seq;
+    const current = () => seq === tab.seq && tab === activeTab() && !document.querySelector("dialog[open]");
+    if (tab.view === "documents" && tab.page && tab.applied) {
+      const page = await invoke("client_find", { id: conn.id, request: findRequest(tab, conn, tab.applied) }).catch(() => null);
+      if (!page || !current() || tab.view !== "documents") return;
+      const same = page.total === tab.page.total && JSON.stringify(page.rows) === JSON.stringify(tab.page.rows);
+      if (same || !redrawDocuments(tab, page)) return;
+      view.querySelector(".db-subtabs").innerHTML = subtabsHtml(tab, isPostgres(tab));
+      updateStatus();
+    } else if (tab.view === "indexes" && tab.indexes) {
+      const indexes = await invoke("client_indexes", { id: conn.id, database: tab.db, collection: tab.coll }).catch(() => null);
+      if (!indexes || !current() || tab.view !== "indexes" || JSON.stringify(indexes) === JSON.stringify(tab.indexes)) return;
+      tab.indexes = indexes;
+      view.querySelector(".db-subtabs").innerHTML = subtabsHtml(tab, isPostgres(tab));
+      renderIndexes(tab);
+    }
+  }
+
+  /** Shows `page` in place of the current one. False, leaving the old page, while text is selected. */
+  function redrawDocuments(tab, page) {
+    const box = results();
+    if (!box) return false;
+    const selection = window.getSelection();
+    if (selection?.toString() && box.contains(selection.anchorNode)) return false;
+    const scroll = box.scrollTop;
+    const across = box.querySelector(".grid-wrap")?.scrollLeft || 0;
+    const open = [...box.querySelectorAll(".kv.open")].map((kv) => kv.dataset.path);
+    tab.page = page;
+    renderDocuments(tab);
+    for (const path of open) {
+      const kv = [...box.querySelectorAll(".kv[data-path]")].find((el) => el.dataset.path === path);
+      if (!kv) continue;
+      fillKids(tab, kv, "page");
+      kv.classList.add("open");
+    }
+    box.scrollTop = scroll;
+    const grid = box.querySelector(".grid-wrap");
+    if (grid) grid.scrollLeft = across;
+    return true;
+  }
+
+  /** Reads the table and collection lists of every opened database again, for new counts. */
+  async function pollTree() {
+    let changed = false;
+    const jobs = [];
+    for (const conn of live.values()) {
+      for (const db of conn.databases) {
+        if (!conn.expanded.has(db.name) || !db.collections || db.loading) continue;
+        jobs.push(
+          invoke("client_collections", { id: conn.id, database: db.name })
+            .then((list) => {
+              if (JSON.stringify(list) === JSON.stringify(db.collections)) return;
+              db.collections = list;
+              changed = true;
+            })
+            .catch(() => {}),
+        );
+      }
+    }
+    await Promise.all(jobs);
+    if (changed) renderTree();
+  }
 
   function readForm(tab) {
     const form = view.querySelector(".query-bar");
@@ -1097,6 +1645,15 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
 
   return {
     openDialog: () => openDialog(),
+    /** Closes every connection and forgets the saved ones. The caller removes the stored copy. */
+    async clearAll() {
+      await Promise.all([...live.keys()].map(disconnect));
+      await Promise.all(saved.map(forgetSecret));
+      saved = [];
+      tabs = [];
+      activeId = null;
+      renderAll();
+    },
     /** Ctrl+W closes the current tab. Returns true when the key was used. */
     handleKey(e) {
       const mod = e.ctrlKey || e.metaKey;

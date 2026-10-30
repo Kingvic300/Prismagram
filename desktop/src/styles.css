@@ -15,6 +15,7 @@
 }
 
 :root {
+  color-scheme: dark;
   /* Cool neutral layers around a paper canvas; one blue accent for focus and selection. */
   --bg: #0e0f11;
   --panel: #141518;
@@ -196,6 +197,27 @@ button {
   border-color: var(--accent-strong);
   color: var(--accent-ink);
   font-weight: 600;
+}
+
+.btn.danger {
+  color: var(--danger);
+}
+
+.btn.danger:hover {
+  border-color: rgba(242, 122, 122, 0.4);
+  background: rgba(242, 122, 122, 0.1);
+}
+
+.btn.destructive {
+  background: #c93a3a;
+  border-color: #c93a3a;
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn.destructive:hover {
+  background: #b53232;
+  border-color: #b53232;
 }
 
 .btn.primary:hover {
@@ -1082,6 +1104,20 @@ kbd {
   opacity: 0.6;
 }
 
+/* WebKitGTK draws native selects in the light GTK theme; draw our own control instead. */
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0 28px 0 10px;
+  background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a5a6ae' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 9px center / 12px;
+  cursor: pointer;
+}
+
+select.input option {
+  background: var(--raised);
+  color: var(--text);
+}
+
 .input.mono {
   font-family: var(--mono);
   font-size: 12px;
@@ -1110,6 +1146,81 @@ kbd {
   flex: 1;
   color: var(--muted);
   font-size: 12px;
+}
+
+/* ---------- write dialog ---------- */
+
+.action-dialog {
+  width: min(680px, calc(100vw - 32px));
+}
+
+.action-dialog .hint {
+  margin-bottom: 12px;
+}
+
+.action-text {
+  display: block;
+  height: 240px;
+  padding: 10px 12px;
+  line-height: 1.55;
+  resize: vertical;
+  tab-size: 2;
+  user-select: text;
+}
+
+.action-options {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.action-options .input {
+  flex: 1;
+}
+
+.run-preview {
+  max-height: 200px;
+  margin: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--syn-type);
+  font: 12px / 1.55 var(--mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.run-preview.invalid {
+  color: var(--warning);
+  font-family: var(--sans);
+}
+
+.grid .row-acts {
+  width: 1%;
+  padding: 2px 4px;
+  white-space: nowrap;
+}
+
+.row-acts .icon-btn {
+  display: inline-grid;
+  height: 24px;
+  min-width: 24px;
+  padding: 0 4px;
+  opacity: 0;
+}
+
+.grid tr:hover .row-acts .icon-btn,
+.row-acts .icon-btn:focus-visible {
+  opacity: 1;
+}
+
+.grid .row-end {
+  width: 1%;
+  text-align: right;
 }
 
 /* ---------- mode switch ---------- */
@@ -1214,6 +1325,16 @@ body.mode-data .mode-switch::before {
   color: var(--muted);
   font-weight: 400;
   font-variant-numeric: tabular-nums;
+}
+
+.db-side-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.icon-btn.danger:hover {
+  background: rgba(242, 122, 122, 0.1);
+  color: var(--danger);
 }
 
 .db-side-search {
@@ -1687,7 +1808,6 @@ body.mode-data .mode-switch::before {
 .small-select {
   width: auto;
   height: 30px;
-  padding: 0 6px;
   font-size: 12.5px;
 }
 
@@ -1698,6 +1818,29 @@ body.mode-data .mode-switch::before {
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+.live-toggle::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.live-toggle.on {
+  color: var(--text);
+}
+
+.live-toggle.on::before {
+  background: var(--ok);
+  animation: pulse 1s infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-toggle.on::before {
+    animation: none;
+  }
 }
 
 .layout-switch {

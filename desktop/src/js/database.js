@@ -70,7 +70,25 @@ export function createDatabaseImport({ dialog, invoke, onImported }) {
       dialog.showModal();
       (url.value ? password : url).focus();
     },
+    /** Empties the form back to its defaults. The caller removes the stored copy. */
+    clear() {
+      url.value = password.value = "";
+      schemas.value = schemas.defaultValue;
+    },
   };
+}
+
+/**
+ * The connection string with `password` put in, ready to paste elsewhere: in place of a
+ * placeholder such as `[YOUR-PASSWORD]` or `<db_password>`, or after a user name that has none.
+ */
+export function withPassword(url, password) {
+  const value = url.trim();
+  if (!password) return value;
+  const encoded = encodeURIComponent(password);
+  const placeholder = /\[YOUR-PASSWORD\]|<db_password>|<password>/;
+  if (placeholder.test(value)) return value.replace(placeholder, encoded);
+  return value.replace(/^([a-z][\w+.-]*:\/\/[^:/@?#]+)@/i, `$1:${encoded}@`);
 }
 
 /** `postgres://user:secret@host/db` → `postgres://user:[YOUR-PASSWORD]@host/db`. */

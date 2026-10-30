@@ -147,9 +147,20 @@ Several connections can be open at once. The sidebar lists each database (MongoD
 | **SQL** / **Aggregations** | Any SQL (several statements are fine; up to 2,000 rows per result are shown), or a MongoDB aggregation pipeline. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> runs it |
 
 On a PostgreSQL schema, **Diagram** imports it as a Prisma schema and switches to the
-diagram. SQL runs as typed, so statements such as `update` and `delete` change your data;
-the other tabs only read. Passwords are never saved: connections are remembered with the
-password replaced by a placeholder, and you type it again to reconnect.
+diagram.
+
+**Changing data**, as in MongoDB Compass: **Insert** adds a document or row (an array adds
+several), and each document has **Edit**, **Clone** and **Delete** on hover (in the table
+view, at the start of the row). **Update** and **Delete** above the results apply to
+everything the filter matches, and the Indexes tab can create and drop indexes. Every change
+opens a dialog showing exactly what will run before it does: for PostgreSQL the SQL statement
+(rows are picked out by their primary key), for MongoDB the mongosh call. The SQL tab runs
+statements as typed, so `update` and `delete` there change data too. Views are read-only.
+
+**Saved connections** keep their connection string and password in your system keychain
+(Keychain, Credential Manager, or GNOME Keyring / KWallet), so reconnecting is one click.
+The app's own storage keeps only the name and the connection string without the password.
+**Clear all data** (the trash icon next to Connections) removes all of it.
 
 ## How the diagram is drawn
 
@@ -182,7 +193,7 @@ In every mode, clicking a model draws all of its links.
 You need Rust (stable), Node.js 22+ and the Tauri system libraries:
 
 ```bash
-sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev librsvg2-dev \
+sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev librsvg2-dev libdbus-1-dev \
   build-essential libssl-dev patchelf file
 
 scripts/setup-dev.sh          # one-time setup

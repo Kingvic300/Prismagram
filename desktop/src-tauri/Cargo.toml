@@ -28,6 +28,9 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 tokio = { version = "1", features = ["time"] }
 webpki-roots = "1"
 mongodb = "3"
+# Saved connection strings and passwords live in the OS keychain: Keychain on macOS,
+# Credential Manager on Windows, Secret Service (GNOME Keyring, KWallet) on Linux.
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 futures-util = "0.3.34"
 
 [profile.release]

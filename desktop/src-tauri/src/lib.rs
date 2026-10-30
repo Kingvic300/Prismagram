@@ -1,5 +1,6 @@
 mod client;
 mod database;
+mod secrets;
 
 use prismagram_core as prisma;
 
@@ -137,6 +138,41 @@ async fn client_sql(
     connections.sql(&id, &database, &sql).await
 }
 
+#[tauri::command]
+async fn client_write(
+    connections: State<'_, client::Connections>,
+    id: String,
+    database: String,
+    collection: String,
+    write: client::Write,
+) -> Result<client::WriteResult, String> {
+    connections.write(&id, &database, &collection, &write).await
+}
+
+/// Keychain calls can wait on an unlock prompt, so they run off the main thread.
+async fn keychain<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn secret_save(account: String, url: String, password: String) -> Result<(), String> {
+    keychain(move || secrets::save(&account, &secrets::Secret { url, password })).await
+}
+
+#[tauri::command]
+async fn secret_load(account: String) -> Result<Option<secrets::Secret>, String> {
+    keychain(move || secrets::load(&account)).await
+}
+
+#[tauri::command]
+async fn secret_forget(account: String) -> Result<(), String> {
+    keychain(move || secrets::forget(&account)).await
+}
+
 /// A `.prisma` path passed on the command line (e.g. "Open with Prismagram").
 #[tauri::command]
 fn launch_file() -> Option<String> {
@@ -174,7 +210,11 @@ pub fn run() {
             client_aggregate,
             client_columns,
             client_indexes,
-            client_sql
+            client_sql,
+            client_write,
+            secret_save,
+            secret_load,
+            secret_forget
         ])
         .run(tauri::generate_context!())
         .expect("error while running Prismagram");

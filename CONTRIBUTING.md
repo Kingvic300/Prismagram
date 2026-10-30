@@ -41,7 +41,7 @@ You need Rust (stable), Node.js 22 or newer, and the Tauri system libraries. On 
 Ubuntu or Kali:
 
 ```bash
-sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev librsvg2-dev \
+sudo apt install -y libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev librsvg2-dev libdbus-1-dev \
   build-essential libssl-dev patchelf file
 ```
 

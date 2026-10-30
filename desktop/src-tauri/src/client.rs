@@ -60,7 +60,8 @@ pub struct Collection {
     pub name: String,
     /// "table", "view", "materialized view", "foreign table", "collection" or "timeseries".
     pub kind: String,
-    /// PostgreSQL's row estimate; -1 when the table was never analyzed.
+    /// The row count: exact for PostgreSQL tables under EXACT_COUNT_LIMIT rows, otherwise the
+    /// planner's estimate (-1 when the table was never analyzed).
     pub count: Option<i64>,
 }
 
@@ -131,6 +132,47 @@ pub struct ResultSet {
     /// Rows returned or changed.
     pub count: u64,
     pub truncated: bool,
+}
+
+/// A change to a MongoDB collection. Filters, documents and keys are Extended JSON. PostgreSQL
+/// tables are changed with SQL instead, through `sql`, so the UI can show the statement it runs.
+#[derive(Deserialize)]
+#[serde(tag = "op", rename_all = "camelCase")]
+pub enum Write {
+    /// One document, or an array of them.
+    InsertOne {
+        document: String,
+    },
+    ReplaceOne {
+        filter: String,
+        document: String,
+    },
+    DeleteOne {
+        filter: String,
+    },
+    DeleteMany {
+        filter: String,
+    },
+    /// `update` is an update document like `{ $set: ... }` or a pipeline array.
+    UpdateMany {
+        filter: String,
+        update: String,
+    },
+    CreateIndex {
+        keys: String,
+        unique: bool,
+        name: String,
+    },
+    DropIndex {
+        name: String,
+    },
+}
+
+#[derive(Serialize)]
+pub struct WriteResult {
+    /// Documents inserted, changed or deleted; 1 for index changes.
+    pub count: u64,
+    pub ms: u64,
 }
 
 #[derive(Serialize)]
@@ -381,6 +423,96 @@ impl Connections {
         }
     }
 
+    pub async fn write(
+        &self,
+        id: &str,
+        database: &str,
+        collection: &str,
+        write: &Write,
+    ) -> Result<WriteResult, String> {
+        let Connection::Mongo(client) = &*self.get(id)? else {
+            return Err("PostgreSQL tables are changed with SQL.".into());
+        };
+        let start = Instant::now();
+        let coll = client.database(database).collection::<Document>(collection);
+        let count = match write {
+            Write::InsertOne { document } => match parse_json(document, "document")? {
+                Bson::Document(doc) => coll.insert_one(doc).await.map(|_| 1),
+                Bson::Array(items) => {
+                    let docs = items
+                        .into_iter()
+                        .map(|item| match item {
+                            Bson::Document(doc) => Ok(doc),
+                            _ => Err("Each item to insert must be a document.".to_string()),
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    if docs.is_empty() {
+                        return Err("There is nothing to insert.".into());
+                    }
+                    coll.insert_many(docs)
+                        .await
+                        .map(|r| r.inserted_ids.len() as u64)
+                }
+                _ => return Err("Insert a document, like { name: 'Ada' }.".into()),
+            },
+            Write::ReplaceOne { filter, document } => coll
+                .replace_one(
+                    parse_document(filter, "filter")?,
+                    parse_document(document, "document")?,
+                )
+                .await
+                .map(|r| r.matched_count),
+            Write::DeleteOne { filter } => coll
+                .delete_one(parse_document(filter, "filter")?)
+                .await
+                .map(|r| r.deleted_count),
+            Write::DeleteMany { filter } => coll
+                .delete_many(parse_document(filter, "filter")?)
+                .await
+                .map(|r| r.deleted_count),
+            Write::UpdateMany { filter, update } => {
+                let filter = parse_document(filter, "filter")?;
+                match parse_json(update, "update")? {
+                    Bson::Document(update) => coll.update_many(filter, update).await,
+                    Bson::Array(stages) => {
+                        let stages = stages
+                            .into_iter()
+                            .map(|stage| match stage {
+                                Bson::Document(stage) => Ok(stage),
+                                _ => Err("Each pipeline stage must be a document.".to_string()),
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        coll.update_many(filter, stages).await
+                    }
+                    _ => {
+                        return Err(
+                            "The update must be a document, like { $set: { status: 'done' } }."
+                                .into(),
+                        )
+                    }
+                }
+                .map(|r| r.modified_count)
+            }
+            Write::CreateIndex { keys, unique, name } => {
+                let options = mongodb::options::IndexOptions::builder()
+                    .unique(unique.then_some(true))
+                    .name((!name.trim().is_empty()).then(|| name.trim().to_string()))
+                    .build();
+                let model = mongodb::IndexModel::builder()
+                    .keys(parse_document(keys, "index keys")?)
+                    .options(options)
+                    .build();
+                coll.create_index(model).await.map(|_| 1)
+            }
+            Write::DropIndex { name } => coll.drop_index(name.as_str()).await.map(|_| 1),
+        }
+        .map_err(mongo_message)?;
+        Ok(WriteResult {
+            count,
+            ms: start.elapsed().as_millis() as u64,
+        })
+    }
+
     /// Runs SQL typed by the user, which may hold several statements. `schema` goes first on
     /// the search path, so unqualified table names resolve to the schema being browsed.
     pub async fn sql(&self, id: &str, schema: &str, sql: &str) -> Result<QueryResult, String> {
@@ -441,7 +573,8 @@ impl Connections {
 // ---------------------------------------------------------------- PostgreSQL
 
 async fn postgres_tables(client: &tokio_postgres::Client) -> Result<Vec<Database>, String> {
-    let sql = "select n.nspname::text, c.relname::text, c.relkind::text, c.reltuples::bigint \
+    let sql = "select n.nspname::text, c.relname::text, c.relkind::text, c.reltuples::bigint, \
+               c.relkind in ('r', 'p', 'm') and has_table_privilege(c.oid, 'SELECT') \
                from pg_class c join pg_namespace n on n.oid = c.relnamespace \
                where c.relkind in ('r', 'p', 'v', 'm', 'f') and not c.relispartition \
                and n.nspname !~ '^pg_' and n.nspname <> 'information_schema' \
@@ -452,8 +585,14 @@ async fn postgres_tables(client: &tokio_postgres::Client) -> Result<Vec<Database
         .await
         .map_err(|e| format!("Could not list the tables: {}", sql_error(&e, None)))?;
     let mut databases: Vec<Database> = Vec::new();
+    // Tables small enough to count exactly, as `(schema, table)` in list order.
+    let mut small: Vec<(String, String)> = Vec::new();
     for row in rows {
         let schema: String = row.get(0);
+        let estimate: i64 = row.get(3);
+        if row.get::<_, bool>(4) && estimate < EXACT_COUNT_LIMIT {
+            small.push((schema.clone(), row.get(1)));
+        }
         let kind = match row.get::<_, &str>(2) {
             "v" => "view",
             "m" => "materialized view",
@@ -463,7 +602,7 @@ async fn postgres_tables(client: &tokio_postgres::Client) -> Result<Vec<Database
         let table = Collection {
             name: row.get(1),
             kind: kind.into(),
-            count: Some(row.get(3)),
+            count: Some(estimate),
         };
         match databases.last_mut() {
             Some(db) if db.name == schema => {
@@ -473,6 +612,36 @@ async fn postgres_tables(client: &tokio_postgres::Client) -> Result<Vec<Database
                 name: schema,
                 collections: Some(vec![table]),
             }),
+        }
+    }
+
+    // reltuples only changes on VACUUM and ANALYZE, so on a small or freshly written table it
+    // is often far off or -1. Count those exactly, in one round trip, the way the Rows tab does.
+    // If the count fails (a lock, a permission), the estimates stay.
+    if !small.is_empty() {
+        let sql = small
+            .iter()
+            .enumerate()
+            .map(|(i, (schema, table))| {
+                format!("select {i}, count(*) from {}", qualified(schema, table))
+            })
+            .collect::<Vec<_>>()
+            .join(" union all ");
+        if let Ok(rows) = client.query(&sql, &[]).await {
+            let counts: HashMap<i32, i64> = rows.iter().map(|r| (r.get(0), r.get(1))).collect();
+            for (i, (schema, table)) in small.iter().enumerate() {
+                let Some(&count) = counts.get(&(i as i32)) else {
+                    continue;
+                };
+                if let Some(c) = databases
+                    .iter_mut()
+                    .find(|db| &db.name == schema)
+                    .and_then(|db| db.collections.as_mut())
+                    .and_then(|list| list.iter_mut().find(|c| &c.name == table))
+                {
+                    c.count = Some(count);
+                }
+            }
         }
     }
     Ok(databases)

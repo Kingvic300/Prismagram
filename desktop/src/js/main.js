@@ -729,6 +729,32 @@ const updater = createUpdater({
 $("btnCheckUpdates").addEventListener("click", () => updater.check({ manual: true }));
 $("btnCheckUpdates").hidden = !updater.available;
 
+// Forget everything kept in local storage: settings, saved connections and the Supabase
+// import form. Files on disk and the editor's text are left alone.
+async function clearAllData() {
+  const ok = await tauri.dialog.ask(
+    "This closes open database connections and removes saved connections and their passwords from the system keychain, the Supabase import details and your settings. Your files are not touched.",
+    { title: "Clear all data", kind: "warning", okLabel: "Clear all data", cancelLabel: "Cancel" },
+  );
+  if (!ok) return;
+  await dataClient.clearAll();
+  databaseImport.clear();
+  try {
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith("prismagram."))
+      .forEach((key) => localStorage.removeItem(key));
+  } catch {
+    /* storage unavailable: nothing was saved */
+  }
+  state.opts = { ...DEFAULT_OPTIONS };
+  renderSettings();
+  updater.setAuto(state.opts.autoUpdate);
+  redraw();
+  toast("All saved data cleared");
+}
+$("btnClearData").addEventListener("click", clearAllData);
+$("dbClearData").addEventListener("click", clearAllData);
+
 // Drag and drop from the file manager.
 if (tauri?.event) {
   const overlay = $("dropOverlay");

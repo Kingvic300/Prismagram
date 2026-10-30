@@ -16,3 +16,7 @@ release/
 .idea/
 .DS_Store
 *.swp
+
+# /brag render artifacts and the bundled music track (its license is not cleared for redistribution)
+brag-output/composition/.hyperframes/
+brag-output/composition/assets/music/
