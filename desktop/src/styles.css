@@ -2488,8 +2488,7 @@ body.settings-open #dataspace {
 }
 
 .set-section {
-  max-width: 760px;
-  margin: 0 auto 36px;
+  margin: 0 0 36px;
   padding-bottom: 36px;
   border-bottom: 1px solid var(--border);
   scroll-margin-top: 24px;
