@@ -18,7 +18,7 @@ jobs:
         include:
           - platform: ubuntu-22.04
             bundles: deb,appimage,rpm
-          - platform: macos-14       # Apple silicon
+          - platform: macos-15       # Apple silicon
             bundles: dmg,app
           - platform: macos-15-intel # Intel
             bundles: dmg,app
