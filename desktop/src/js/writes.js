@@ -106,6 +106,42 @@ export function dropIndexSql(schema, name) {
   return `DROP INDEX ${tableName(schema, name)};`;
 }
 
+/**
+ * Tables that record which migrations ran (Prisma, Drizzle, Rails, Knex, Sequelize, Flyway,
+ * EF Core, goose, TypeORM). Clearing them would make the next migrate run every migration again.
+ */
+export const MIGRATION_TABLES = new Set([
+  "_prisma_migrations",
+  "__drizzle_migrations",
+  "schema_migrations",
+  "ar_internal_metadata",
+  "knex_migrations",
+  "knex_migrations_lock",
+  "SequelizeMeta",
+  "flyway_schema_history",
+  "__EFMigrationsHistory",
+  "goose_db_version",
+  "typeorm_migrations",
+]);
+
+/**
+ * What "Clear all data" empties in a schema (PostgreSQL) or database (MongoDB): every table or
+ * collection that holds rows, except views and the migration tables above.
+ */
+export function clearableCollections(collections) {
+  return (collections || []).filter((c) => ["table", "collection", "timeseries"].includes(c.kind) && !MIGRATION_TABLES.has(c.name));
+}
+
+/**
+ * Empties `tables` in one statement, so foreign keys between them don't get in the way, and
+ * restarts their identity sequences. No CASCADE: a table outside the list that references one
+ * of them makes the statement fail instead of being emptied too.
+ */
+export function truncateSql(schema, tables) {
+  if (!tables.length) throw new Error("There are no tables to clear.");
+  return `TRUNCATE TABLE\n  ${tables.map((t) => tableName(schema, t)).join(",\n  ")}\nRESTART IDENTITY;`;
+}
+
 /** Columns a new row should start with: everything without a default, empty. */
 export function rowTemplate(fields) {
   return Object.fromEntries(fields.filter((f) => !f.default).map((f) => [f.name, null]));

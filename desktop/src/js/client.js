@@ -7,6 +7,7 @@
 import { inferSchema, parseShell, scalarText, toCSV, toShell, typeOf } from "./values.js";
 import { withPassword, withoutPassword } from "./database.js";
 import {
+  clearableCollections,
   createIndexSql,
   deleteSql,
   deleteWhereSql,
@@ -14,6 +15,7 @@ import {
   insertSql,
   mongoCall,
   rowTemplate,
+  truncateSql,
   updateSql,
   updateWhereSql,
 } from "./writes.js";
@@ -335,7 +337,7 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     const active = activeTab();
     let html = `<div class="tree-row db-row" data-act="toggle-db" data-db="${esc(db.name)}">
       <span class="caret${open ? " open" : ""}">${ICONS.caret}</span>${ICONS.db}<span class="name">${esc(db.name)}</span>
-      ${conn.kind === "postgres" ? `<span class="row-actions">${iconButton("diagram-db", ICONS.diagram, `Diagram the ${db.name} schema`)}</span>` : ""}
+      <span class="row-actions">${conn.kind === "postgres" ? iconButton("diagram-db", ICONS.diagram, `Diagram the ${db.name} schema`) : ""}<button class="icon-btn danger" data-act="clear-db" title="${esc(`Clear all data in ${db.name}`)}">${ICONS.trash}</button></span>
     </div>`;
     if (!open) return html;
     if (db.loading) return html + skeletonHtml("tree", 3);
@@ -402,6 +404,8 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
         return openTab(conn, conn.defaultDatabase || conn.databases[0]?.name || "public", null, null);
       case "diagram-db":
         return onDiagram({ url: conn.url, password: conn.password, schemas: [db] });
+      case "clear-db":
+        return clearDatabase(conn, db);
       case "toggle-db": {
         if (conn.expanded.has(db)) conn.expanded.delete(db);
         else {
@@ -1184,9 +1188,10 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
 
   /**
    * `text` (null for none) is edited in a textarea, `index` adds the unique and name fields.
+   * `confirm`, when set, must be typed before the submit button works.
    * `preview(values)` returns what will run; `submit(values)` runs it and returns the toast.
    */
-  function openAction({ title, hint = "", text = null, index = false, label, danger = false, preview, submit }) {
+  function openAction({ title, hint = "", text = null, index = false, confirm = "", label, danger = false, preview, submit }) {
     actionDialog.innerHTML = `<form>
       <h2>${esc(title)}</h2>
       ${hint ? `<p class="hint">${hint}</p>` : ""}
@@ -1199,6 +1204,12 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
       }
       <span class="field-label">Runs</span>
       <pre class="run-preview" data-preview></pre>
+      ${
+        confirm
+          ? `<label class="field-label" for="actionConfirm">Type <b>${esc(confirm)}</b> to confirm</label>
+              <input id="actionConfirm" class="input mono" name="confirm" autocomplete="off" spellcheck="false" autocapitalize="off" />`
+          : ""
+      }
       <p class="dialog-error" data-error role="alert" hidden></p>
       <div class="dialog-actions">
         <span class="note"></span>
@@ -1212,7 +1223,9 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     const previewEl = form.querySelector("[data-preview]");
     const errorEl = form.querySelector("[data-error]");
     const submitBtn = form.querySelector("[data-submit]");
+    const confirmed = () => !confirm || field("confirm").value.trim() === confirm;
     const update = () => {
+      submitBtn.disabled = !confirmed();
       try {
         previewEl.textContent = preview(values());
         previewEl.classList.remove("invalid");
@@ -1225,6 +1238,7 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     form.querySelector("[data-cancel]").addEventListener("click", () => actionDialog.close());
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (!confirmed()) return;
       errorEl.hidden = true;
       submitBtn.disabled = true;
       try {
@@ -1235,12 +1249,12 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
         errorEl.textContent = String(err?.message || err);
         errorEl.hidden = false;
       } finally {
-        submitBtn.disabled = false;
+        submitBtn.disabled = !confirmed();
       }
     });
     update();
     actionDialog.showModal();
-    (field("text") || submitBtn).focus();
+    (field("text") || field("confirm") || submitBtn).focus();
   }
 
   async function startWrite(tab, act, target) {
@@ -1500,6 +1514,74 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     else fetchDocuments(tab);
     const conn = connOf(tab);
     if (conn?.kind === "postgres") loadCollections(conn, tab.db);
+  }
+
+  /**
+   * "Clear all data": empties every table of a PostgreSQL schema, or every collection of a
+   * MongoDB database, keeping the tables themselves, views and migration history.
+   */
+  async function clearDatabase(conn, name) {
+    const db = conn.databases.find((d) => d.name === name);
+    if (!db) return;
+    if (!db.collections) await loadCollections(conn, name);
+    if (db.error) return toast(db.error, true);
+    const pg = conn.kind === "postgres";
+    const noun = pg ? "table" : "collection";
+    const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+    const targets = clearableCollections(db.collections);
+    if (!targets.length) return toast(`${name} has no ${noun}s to clear`, true);
+    const kept = (db.collections || []).filter((c) => !targets.includes(c) && !c.kind.includes("view") && c.kind !== "foreign table");
+    const rows = targets.reduce((n, c) => n + Math.max(c.count ?? 0, 0), 0);
+    const about = pg && targets.some((c) => typeof c.count === "number") ? ` (about ${plural(rows, "row")})` : "";
+    const hint =
+      `Deletes everything in ${plural(targets.length, noun)} of <b>${esc(name)}</b>${about}. ` +
+      `The ${noun}s, their columns and indexes stay${pg ? ", and ID sequences start again at 1" : ""}. ` +
+      (kept.length ? `Kept: ${kept.map((c) => `<code>${esc(c.name)}</code>`).join(", ")}. ` : "") +
+      "This can't be undone.";
+    const done = () => {
+      loadCollections(conn, name);
+      tabs.filter((t) => t.conn === conn.key && t.db === name).forEach((t) => fetchActive(t));
+    };
+    if (pg) {
+      const sql = truncateSql(name, targets.map((c) => c.name));
+      return openAction({
+        title: `Clear all data in ${name}`,
+        hint,
+        confirm: name,
+        label: "Clear all data",
+        danger: true,
+        preview: () => sql,
+        submit: async () => {
+          await invoke("client_sql", { id: conn.id, database: name, sql });
+          done();
+          return `Cleared ${plural(targets.length, "table")} in ${name}`;
+        },
+      });
+    }
+    return openAction({
+      title: `Clear all data in ${name}`,
+      hint,
+      confirm: name,
+      label: "Clear all data",
+      danger: true,
+      preview: () => targets.map((c) => mongoCall(c.name, "deleteMany", {})).join("\n"),
+      submit: async () => {
+        let deleted = 0;
+        let cleared = 0;
+        try {
+          for (const c of targets) {
+            const write = { op: "deleteMany", filter: "{}" };
+            deleted += (await invoke("client_write", { id: conn.id, database: name, collection: c.name, write })).count;
+            cleared++;
+          }
+        } catch (err) {
+          throw new Error(`Cleared ${plural(cleared, "collection")}, then ${targets[cleared].name} failed: ${err}`);
+        } finally {
+          done();
+        }
+        return `Deleted ${plural(deleted, "document")} from ${plural(cleared, "collection")} in ${name}`;
+      },
+    });
   }
 
   /** Draws a nested field's children the first time it is opened. */

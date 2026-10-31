@@ -2,6 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  clearableCollections,
   createIndexSql,
   deleteSql,
   deleteWhereSql,
@@ -10,6 +11,7 @@ import {
   literal,
   mongoCall,
   rowTemplate,
+  truncateSql,
   updateSql,
   updateWhereSql,
 } from "../src/js/writes.js";
@@ -74,4 +76,25 @@ test("starts new rows with the columns that have no default", () => {
 test("shows MongoDB changes as mongosh calls", () => {
   assert.equal(mongoCall("users", "deleteOne", { _id: { $oid: "6566a1b2c3d4e5f60718293a" } }), "db.users.deleteOne({\n  _id: ObjectId('6566a1b2c3d4e5f60718293a')\n})");
   assert.equal(mongoCall("my-logs", "dropIndex", "ts_1"), 'db.getCollection("my-logs").dropIndex("ts_1")');
+});
+
+test("clears every table of a schema in one TRUNCATE, keeping migration history and views", () => {
+  const collections = [
+    { name: "users", kind: "table" },
+    { name: "posts", kind: "table" },
+    { name: "_prisma_migrations", kind: "table" },
+    { name: "active_users", kind: "view" },
+    { name: "stats", kind: "materialized view" },
+    { name: "events", kind: "timeseries" },
+  ];
+  assert.deepEqual(
+    clearableCollections(collections).map((c) => c.name),
+    ["users", "posts", "events"],
+  );
+  assert.deepEqual(clearableCollections(null), []);
+  assert.equal(
+    truncateSql("public", ["users", 'we"ird']),
+    'TRUNCATE TABLE\n  "public"."users",\n  "public"."we""ird"\nRESTART IDENTITY;',
+  );
+  assert.throws(() => truncateSql("public", []), /no tables/);
 });
