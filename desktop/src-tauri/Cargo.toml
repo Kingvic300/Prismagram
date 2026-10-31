@@ -1,6 +1,6 @@
 [package]
 name = "prismagram"
-version = "0.4.1"
+version = "0.4.2"
 description = "Turn Prisma schemas into UML class diagrams"
 authors = ["Prismagram contributors"]
 license = "MIT"

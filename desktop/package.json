@@ -1,7 +1,7 @@
 {
   "name": "prismagram-desktop",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.4.2",
   "type": "module",
   "license": "MIT",
   "description": "Turn Prisma schemas into UML class diagrams",
