@@ -1,7 +1,7 @@
 // Queries typed in mongosh syntax must reach Rust as Extended JSON, and documents must read back.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { inferSchema, parseShell, toCSV, toShell, typeOf } from "../src/js/values.js";
+import { inferSchema, parseShell, resultText, toCSV, toShell, typeOf, withReturning } from "../src/js/values.js";
 
 test("parses mongosh query syntax into Extended JSON", () => {
   assert.equal(parseShell("   "), undefined);
@@ -93,4 +93,34 @@ test("writes CSV with nested values as JSON", () => {
     csv,
     '_id,name,tags,extra\n69e1f6d8fc5c0aa566d73025,"Ann ""A"", B","[""x""]",\n69e1f7b4d5702d38e2f75b9f,,,\n',
   );
+});
+
+// SQL results copied to the clipboard: spreadsheets paste TSV, files take CSV, and JSON keeps NULL.
+test("copies SQL results as TSV, CSV or JSON", () => {
+  const columns = ["id", "name", "note"];
+  const rows = [
+    ["1", "Ann", null],
+    ["2", 'say "hi", twice', "line\nbreak"],
+  ];
+  assert.equal(resultText(columns, rows, "tsv"), 'id\tname\tnote\n1\tAnn\t\n2\t"say ""hi"", twice"\t"line\nbreak"\n');
+  assert.equal(resultText(columns, rows, "csv"), 'id,name,note\n1,Ann,\n2,"say ""hi"", twice","line\nbreak"\n');
+  assert.deepEqual(JSON.parse(resultText(columns, rows, "json")), [
+    { id: "1", name: "Ann", note: null },
+    { id: "2", name: 'say "hi", twice', note: "line\nbreak" },
+  ]);
+});
+
+test("keeps repeated column names apart when copying", () => {
+  const parsed = JSON.parse(resultText(["id", "id", "id"], [["a", "b", "c"]], "json"));
+  assert.deepEqual(parsed, [{ id: "a", id_2: "b", id_3: "c" }]);
+});
+
+test("returns the rows a single UPDATE, INSERT or DELETE changed", () => {
+  assert.equal(withReturning("UPDATE participants SET progress = 1 WHERE id = 'x';"), "UPDATE participants SET progress = 1 WHERE id = 'x'\nRETURNING *;");
+  assert.equal(withReturning("delete from t where id = 1"), "delete from t where id = 1\nRETURNING *;");
+  assert.equal(withReturning("insert into t (a) values (1)  ;  "), "insert into t (a) values (1)\nRETURNING *;");
+  // Left alone: reads, batches, and statements that already return rows.
+  assert.equal(withReturning("select * from t;"), "select * from t;");
+  assert.equal(withReturning("update a set x = 1; update b set y = 2;"), "update a set x = 1; update b set y = 2;");
+  assert.equal(withReturning("update t set x = 1 returning id"), "update t set x = 1 returning id");
 });

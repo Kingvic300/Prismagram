@@ -17,6 +17,7 @@ const DEFAULT_OPTIONS = {
   marker: "triangle",
   showRelations: true,
   showEnums: true,
+  showGuessedLinks: true,
   showDefaults: true,
   showProps: false,
   showConstraints: false,
@@ -352,6 +353,9 @@ function describeEdge(e) {
   if (!e) return "";
   if (e.kind === "enum") return `<b>${escapeHtml(e.parent)}</b> uses enum <b>${escapeHtml(e.child)}</b>`;
   if (e.kind === "composite") return `<b>${escapeHtml(e.parent)}</b> embeds type <b>${escapeHtml(e.child)}</b>`;
+  if (e.kind === "soft") {
+    return `<b>${escapeHtml(e.child)}</b> probably points at <b>${escapeHtml(e.parent)}</b>\nvia ${e.fields.map((f) => escapeHtml(f)).join(", ")}\nguessed from the name, no @relation`;
+  }
   const r = e.rel;
   const kind = r.kind.replace(/-/g, " ");
   const left = `${r.parent}${r.parentField ? "." + r.parentField : ""}`;

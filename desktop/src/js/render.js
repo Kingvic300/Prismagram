@@ -160,7 +160,8 @@ function label(text, x, y, anchor, theme) {
 export function renderEdge(e, theme, opts, interactive) {
   const pts = e.points;
   if (!pts || pts.length < 2) return "";
-  const dashed = e.kind === "enum";
+  // Enum links and guessed links (no @relation) are dashed; guessed ones use a finer dash.
+  const dash = e.kind === "soft" ? "2 4" : e.kind === "enum" ? "6 5" : null;
   const radius = opts.rounded ? 8 : 3;
   let parentEnd;
   let childEnd;
@@ -175,12 +176,18 @@ export function renderEdge(e, theme, opts, interactive) {
   }
 
   const parentMarker =
-    e.kind === "composite" ? "diamond-filled" : e.kind === "enum" ? "none" : e.rel?.kind === "many-to-many" ? "none" : opts.marker;
+    e.kind === "composite"
+      ? "diamond-filled"
+      : e.kind === "enum" || e.kind === "soft"
+        ? "none"
+        : e.rel?.kind === "many-to-many"
+          ? "none"
+          : opts.marker;
   const childMarker = e.kind === "enum" ? "arrow" : "none";
 
   let out = `<g class="edge" data-edge="${e.id}" data-a="${esc(e.parent)}" data-b="${esc(e.child)}">`;
   const d = pathFor(pts, radius);
-  out += `<path class="line" d="${d}" fill="none" stroke="${theme.line}" stroke-width="1.6"${dashed ? ' stroke-dasharray="6 5"' : ""} stroke-linejoin="round"/>`;
+  out += `<path class="line" d="${d}" fill="none" stroke="${theme.line}" stroke-width="1.6"${dash ? ` stroke-dasharray="${dash}"` : ""} stroke-linejoin="round"/>`;
   out += marker(parentMarker, parentEnd.p, parentEnd.dir, theme);
   out += marker(childMarker, childEnd.p, childEnd.dir, theme);
 

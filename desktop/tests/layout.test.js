@@ -2,7 +2,7 @@
 // webview, so these tests check structure and geometry rules, not exact pixel positions.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildGraph, layout } from "../src/js/layout.js";
+import { buildGraph, guessTarget, layout } from "../src/js/layout.js";
 import { renderSVG, THEMES } from "../src/js/render.js";
 
 const OPTS = {
@@ -160,4 +160,37 @@ test("Mermaid export lists every model, enum and relation", async () => {
   assert.match(text, /<<enumeration>>\n {4}land\n {4}water/);
   assert.match(text, /Animal \.\.> Habitat/);
   assert.ok(!text.includes("("), "parentheses would turn members into methods");
+});
+
+test("guesses the model a *_id column points at from its name", () => {
+  const names = ["users", "challenges", "ledger_entries", "org_threads", "organizations", "messages"];
+  assert.equal(guessTarget("user_id", names), "users");
+  assert.equal(guessTarget("challenge_id", names), "challenges");
+  assert.equal(guessTarget("ledger_entry_id", names), "ledger_entries");
+  assert.equal(guessTarget("thread_id", names), "org_threads");
+  assert.equal(guessTarget("org_id", names), "organizations");
+  assert.equal(guessTarget("created_by_id", names), "users");
+  assert.equal(guessTarget("createdById", names), "users");
+  assert.equal(guessTarget("target_id", names), null);
+  assert.equal(guessTarget("name", names), null);
+});
+
+test("draws guessed links dashed, skipping columns that already have a relation", () => {
+  const schema = {
+    ...zoo,
+    models: [model("users", []), model("Chat", [field("user_id", "String", "scalar"), field("author_id", "String", "scalar")])],
+    relations: [rel("users", "Chat", { childField: "user_id" })],
+  };
+  const graph = buildGraph(schema, { ...OPTS, linkMode: "all", showGuessedLinks: true });
+  const soft = graph.edges.filter((e) => e.kind === "soft");
+  assert.equal(soft.length, 1);
+  assert.deepEqual(soft[0].fields, ["author_id"]);
+  assert.equal(soft[0].parent, "users");
+  assert.equal(soft[0].child, "Chat");
+
+  const off = buildGraph(schema, { ...OPTS, linkMode: "all", showGuessedLinks: false });
+  assert.equal(off.edges.filter((e) => e.kind === "soft").length, 0);
+
+  const svg = renderSVG(layout(graph), THEMES.classic, OPTS, { background: true });
+  assert.match(svg, /stroke-dasharray="2 4"/);
 });

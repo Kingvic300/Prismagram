@@ -4,7 +4,7 @@
 // Saved connections are listed from local storage without their passwords; the full connection
 // string and password are kept in the system keychain (secrets.rs) and read back to reconnect.
 
-import { inferSchema, parseShell, scalarText, toCSV, toShell, typeOf } from "./values.js";
+import { inferSchema, parseShell, resultText, scalarText, toCSV, toShell, typeOf, withReturning } from "./values.js";
 import { withPassword, withoutPassword } from "./database.js";
 import {
   clearableCollections,
@@ -626,10 +626,11 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
         <div class="query-editor">
           <textarea class="sql" data-query spellcheck="false" autocapitalize="off" autocomplete="off">${esc(tab.query)}</textarea>
           <div class="query-actions">
+            ${pg && connOf(tab) ? schemaPickerHtml(tab, connOf(tab)) : ""}
             <button class="btn primary small" data-act="run">Run <small>Ctrl+Enter</small></button>
             <span class="note">${
               pg
-                ? `Runs on ${esc(tab.db)}. Statements that change data are applied right away.`
+                ? `Runs on ${esc(tab.db)}. Ctrl+Enter runs only the selected text. Statements that change data are applied right away.`
                 : `An aggregation pipeline on ${esc(tab.coll || "a collection")}. Up to ${PAGE_SIZES.at(-1)} documents are shown.`
             }</span>
           </div>
@@ -637,6 +638,53 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
         <div class="query-results" data-results></div>`;
     }
     return `<div class="db-scroll" data-results></div>`;
+  }
+
+  /** A SQL editor can run in any schema of its connection, not only the one it was opened in. */
+  function schemaPickerHtml(tab, conn) {
+    const names = [...new Set([tab.db, ...conn.databases.map((d) => d.name)])];
+    return `<select class="input small-select" data-act="pick-schema" title="Schema to run the query in">${names
+      .map((n) => `<option value="${esc(n)}"${n === tab.db ? " selected" : ""}>${esc(n)}</option>`)
+      .join("")}</select>`;
+  }
+
+  /** Copy menu for one result set: TSV for spreadsheets, CSV, or JSON. */
+  function copyMenuHtml(index) {
+    return `<div class="menu-wrap">
+      <button class="btn ghost small" data-act="export-menu">${ICONS.copy} Copy</button>
+      <div class="menu" hidden>
+        <button data-copy="tsv" data-set="${index}">Copy for spreadsheets <small>TSV</small></button>
+        <button data-copy="csv" data-set="${index}">Copy as CSV <small>CSV</small></button>
+        <button data-copy="json" data-set="${index}">Copy as JSON <small>JSON</small></button>
+      </div>
+    </div>`;
+  }
+
+  /** Copies a result set of the last run. Copies the rows that are shown, and says so when fewer than the total. */
+  async function copyResult(tab, format, index = 0) {
+    const r = tab.result;
+    if (!r || tab.error) return toast("Nothing to copy", true);
+    const plural = (n) => `${n.toLocaleString()} row${n === 1 ? "" : "s"}`;
+    let text;
+    let label;
+    if (r.results) {
+      const set = r.results[index];
+      if (!set?.columns.length) return toast("Nothing to copy", true);
+      text = resultText(set.columns, set.rows, format);
+      label = set.truncated ? `${plural(set.rows.length)} (first ${set.rows.length.toLocaleString()} of ${set.count.toLocaleString()})` : plural(set.rows.length);
+    } else {
+      const rows = r.rows || [];
+      if (!rows.length) return toast("Nothing to copy", true);
+      text = JSON.stringify(rows, null, 2) + "\n";
+      format = "json";
+      label = plural(rows.length);
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(`Copied ${label} as ${format.toUpperCase()}`);
+    } catch (err) {
+      toast(`Copy failed: ${err}`, true);
+    }
   }
 
   function renderPaneContent(tab) {
@@ -738,12 +786,13 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     );
   }
 
-  function runQuery(tab) {
+  /** Runs the whole query, or `sql` when only part of it is selected. */
+  function runQuery(tab, sql = tab.query) {
     return load(
       tab,
       (conn) =>
         conn.kind === "postgres"
-          ? invoke("client_sql", { id: conn.id, database: tab.db, sql: tab.query })
+          ? invoke("client_sql", { id: conn.id, database: tab.db, sql: withReturning(sql) })
           : invoke("client_aggregate", {
               id: conn.id,
               database: tab.db,
@@ -1002,11 +1051,11 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
       if (!r.results.length) return (box.innerHTML = `<div class="db-message">Done in ${r.ms} ms.</div>`);
       box.innerHTML = r.results
         .map((set, i) => {
-          const head = `<div class="result-head">${r.results.length > 1 ? `<b>Result ${i + 1}</b> · ` : ""}${
+          const head = `<div class="result-head"><span>${r.results.length > 1 ? `<b>Result ${i + 1}</b> · ` : ""}${
             set.columns.length
               ? `${set.count.toLocaleString()} row${set.count === 1 ? "" : "s"}${set.truncated ? `, first ${set.rows.length.toLocaleString()} shown` : ""}`
               : `${set.count.toLocaleString()} row${set.count === 1 ? "" : "s"} affected`
-          } · ${r.ms} ms</div>`;
+          } · ${r.ms} ms</span>${set.columns.length ? copyMenuHtml(i) : ""}</div>`;
           if (!set.columns.length) return head;
           const rows = set.rows
             .map(
@@ -1025,7 +1074,9 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     }
     const rows = r.rows || [];
     box.innerHTML =
-      `<div class="result-head">${rows.length} document${rows.length === 1 ? "" : "s"} in ${r.ms} ms</div>` +
+      `<div class="result-head"><span>${rows.length} document${rows.length === 1 ? "" : "s"} in ${r.ms} ms</span>${
+        rows.length ? `<button class="btn ghost small" data-copy="json" data-set="0">${ICONS.copy} Copy JSON</button>` : ""
+      }</div>` +
       (rows.length ? rows.map((row, i) => docCard(row, i, new Map(), tab.resultFields, "result")).join("") : "");
   }
 
@@ -1053,6 +1104,10 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
 
   view.addEventListener("change", (e) => {
     const tab = activeTab();
+    if (tab && e.target.matches('[data-act="pick-schema"]')) {
+      tab.db = e.target.value;
+      return renderAll();
+    }
     if (tab && e.target.matches('[data-act="limit"]')) {
       tab.limit = Number(e.target.value);
       tab.skip = 0;
@@ -1066,7 +1121,9 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       tab.query = e.target.value;
-      runQuery(tab);
+      // Like a SQL console: with text selected, only the selection runs.
+      const { selectionStart: from, selectionEnd: to } = e.target;
+      runQuery(tab, isPostgres(tab) && from !== to ? tab.query.slice(from, to) : undefined);
     } else if (e.key === "Tab" && !e.ctrlKey && !e.altKey) {
       e.preventDefault();
       document.execCommand("insertText", false, "  ");
@@ -1090,6 +1147,11 @@ export function createDataClient({ dialog, invoke, tauri, toast, onDiagram, onSt
       tab.layout = layout.dataset.layout;
       view.querySelectorAll("[data-layout]").forEach((b) => b.classList.toggle("active", b === layout));
       return renderDocuments(tab);
+    }
+    const copy = e.target.closest("[data-copy]");
+    if (copy) {
+      copy.closest(".menu")?.setAttribute("hidden", "");
+      return copyResult(tab, copy.dataset.copy, Number(copy.dataset.set || 0));
     }
     const exp = e.target.closest("[data-export]");
     if (exp) {

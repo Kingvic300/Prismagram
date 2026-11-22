@@ -365,6 +365,42 @@ export function inferSchema(docs) {
 
 // ---------------------------------------------------------------- export
 
+/**
+ * Adds `RETURNING *` to one UPDATE, INSERT or DELETE, so the rows it changed come back and show
+ * in the result grid. Batches, statements that already return rows, and anything else run as typed.
+ */
+export function withReturning(sql) {
+  const body = sql.trim().replace(/;\s*$/, "").trimEnd();
+  if (!/^(update|insert|delete)\b/i.test(body)) return sql;
+  if (body.includes(";") || /\breturning\b/i.test(body)) return sql;
+  return `${body}\nRETURNING *;`;
+}
+
+/**
+ * A SQL result set as clipboard text. "tsv" pastes straight into a spreadsheet, "csv" is RFC 4180,
+ * "json" is an array of row objects. NULL is an empty cell (null in JSON). Repeated column names
+ * are numbered (id, id_2) so no value is lost.
+ */
+export function resultText(columns, rows, format) {
+  if (format === "json") {
+    const keys = [];
+    const seen = new Map();
+    for (const name of columns) {
+      const n = seen.get(name) ?? 0;
+      seen.set(name, n + 1);
+      keys.push(n ? `${name}_${n + 1}` : name);
+    }
+    return JSON.stringify(rows.map((row) => Object.fromEntries(keys.map((k, i) => [k, row[i] ?? null]))), null, 2) + "\n";
+  }
+  const sep = format === "csv" ? "," : "\t";
+  const special = format === "csv" ? /[",\r\n]/ : /["\t\r\n]/;
+  const cell = (v) => {
+    if (v === null || v === undefined) return "";
+    return special.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  };
+  return [columns.map(cell).join(sep), ...rows.map((r) => r.map(cell).join(sep))].join("\n") + "\n";
+}
+
 /** Rows as CSV. Nested values are written as JSON; Extended JSON scalars as plain text. */
 export function toCSV(rows, columns) {
   const cols = columns?.length ? columns : [...new Set(rows.flatMap((r) => Object.keys(r)))];

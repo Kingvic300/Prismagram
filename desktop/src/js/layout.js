@@ -102,6 +102,61 @@ function makeNode(id, kind, stereotype, sections, info) {
   return { id, kind, stereotype, sections, headH, w: Math.ceil(Math.max(minW, w)), h: Math.ceil(h), ...info };
 }
 
+// Column stems that name a model without matching its table name.
+const LINK_ALIASES = {
+  org: "organizations",
+  author: "users",
+  owner: "users",
+  actor: "users",
+  reporter: "users",
+  creator: "users",
+  sponsor_user: "users",
+  subject_user: "users",
+  linked_user: "users",
+};
+
+/**
+ * Guesses the model a plain `*_id` column points at, from its name alone: `user_id` → users,
+ * `challenge_id` → challenges, `ledger_entry_id` → ledger_entries, `created_by_id` → users.
+ * Returns null when no single model fits.
+ */
+export function guessTarget(column, names) {
+  const snake = column.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+  if (!snake.endsWith("_id")) return null;
+  const base = snake.slice(0, -3);
+  if (!base) return null;
+  const byName = new Map(names.map((n) => [n.toLowerCase(), n]));
+  if (/(^|_)by$/.test(base)) return byName.get("users") ?? null;
+  const stem = LINK_ALIASES[base] ?? base;
+  const plurals = [`${stem}s`, `${stem}es`, stem.replace(/y$/, "ies")];
+  const exact = [stem, ...plurals].map((c) => byName.get(c)).find(Boolean);
+  if (exact) return exact;
+  // Table names with a prefix, such as org_threads for thread_id.
+  const hits = names.filter((n) => plurals.some((c) => n.toLowerCase().endsWith(`_${c}`)));
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/**
+ * Links that Prisma does not know about: a scalar `*_id` column with no @relation, whose name
+ * matches a model. One line per pair of models, listing every column that suggests it.
+ */
+function guessedLinks(schema) {
+  const names = schema.models.map((m) => m.name);
+  const real = new Set(schema.relations.map((r) => r.child + "\u0000" + r.childField));
+  const byPair = new Map();
+  for (const m of schema.models) {
+    for (const f of m.fields) {
+      if (f.kind !== "scalar" || real.has(m.name + "\u0000" + f.name)) continue;
+      const target = guessTarget(f.name, names);
+      if (!target || target === m.name) continue;
+      const key = m.name + "\u0000" + target;
+      if (!byPair.has(key)) byPair.set(key, { parent: target, child: m.name, kind: "soft", fields: [] });
+      byPair.get(key).fields.push(f.name);
+    }
+  }
+  return [...byPair.values()];
+}
+
 /** Builds boxes and edges (without positions) from the parsed schema. */
 export function buildGraph(schema, opts) {
   const nodes = [];
@@ -147,7 +202,10 @@ export function buildGraph(schema, opts) {
       edges.push({ parent: m.name, child: f.typeName, kind, field: f.name });
     }
   }
-  const { shown, hidden, mode } = pickLinks(nodes, edges, opts);
+  const picked = pickLinks(nodes, edges, opts);
+  const { hidden, mode } = picked;
+  // Guessed links are never hidden by the link mode: they are not part of the Prisma relation graph.
+  const shown = [...picked.shown, ...(opts.showGuessedLinks ? guessedLinks(schema) : [])];
   const touching = new Map();
   for (const e of hidden) {
     if (e.kind !== "relation") continue;
