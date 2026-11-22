@@ -6,7 +6,7 @@
     "architecture": {
         "64bit": {
             "url": "https://github.com/Kingvic300/Prismagram/releases/download/v0.4.3/Prismagram_0.4.3_x64-setup.exe#/dl.7z",
-            "hash": "39cd06e95fe1568959026cddb96c55bffdf8dfb2df0d8de183739d2581322e76"
+            "hash": "adf549d40d5b50a7f7079b4e6e8465e4dd503bff40585eb1900434423b2ed296"
         }
     },
     "pre_install": "Remove-Item \"$dir\\$PLUGINSDIR\", \"$dir\\uninstall.exe\" -Recurse -Force -ErrorAction SilentlyContinue",

@@ -2,8 +2,8 @@ cask "prismagram" do
   arch arm: "aarch64", intel: "x64"
 
   version "0.4.3"
-  sha256 arm:   "4101763ba7460e052ca3aa3dbdec100c74ee86936b2bc033d41dc9e1f12656e7",
-         intel: "1aedfb401a6fbf022f550f8687f7c819fe10b0566d29b2fa771a3d52d54f9161"
+  sha256 arm:   "da36eb52f1b5c9980635fe2c794439bfb6ff0a5648cede53228b527f9b3e2322",
+         intel: "35036c4f3c27a03fe341803d2964a61416c43488c11717c5e43a37ee58e1883f"
 
   url "https://github.com/Kingvic300/Prismagram/releases/download/v#{version}/Prismagram_#{version}_#{arch}.dmg"
   name "Prismagram"
